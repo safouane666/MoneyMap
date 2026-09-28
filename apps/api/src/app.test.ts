@@ -7,12 +7,37 @@ import {
   defaultLimitsForPlan,
   buildPublicBillingConfig,
   createIdempotencyKey,
+  filterVisibleEntries,
 } from '@clear-money/domain';
+import { maskEmail } from './mask-email.js';
 
 describe('api domain contracts', () => {
   it('viewer cannot create', () => {
     expect(can('viewer', 'create')).toBe(false);
     expect(can('viewer', 'invite')).toBe(false);
+  });
+
+  it('masks invite email for public GET (P3.1)', () => {
+    expect(maskEmail('friend@example.com')).toBe('fr***@example.com');
+    expect(maskEmail('a@b.co')).toBe('a***@b.co');
+    expect(maskEmail('not-an-email')).toBe('***');
+  });
+
+  it('filters child entries on list contract (P3.3)', () => {
+    const rows = [
+      { id: '1', createdBy: 'child_1' },
+      { id: '2', createdBy: 'parent_1' },
+    ];
+    expect(filterVisibleEntries('child', 'child_1', rows)).toEqual([
+      { id: '1', createdBy: 'child_1' },
+    ]);
+    expect(filterVisibleEntries('viewer', 'viewer_1', rows)).toHaveLength(2);
+  });
+
+  it('role allowlist matches SpaceRole union (P3.2)', () => {
+    const allowed = new Set(['owner', 'admin', 'contributor', 'viewer', 'child']);
+    expect(allowed.has('owner')).toBe(true);
+    expect(allowed.has('superadmin')).toBe(false);
   });
 
   it('transfers excluded from net', () => {

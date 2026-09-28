@@ -46,9 +46,28 @@ import { billingPublicConfig, config } from './config.js';
 import { getAuth } from './auth.js';
 import { db, requireMembership, requirePermission } from './db.js';
 import { rateLimit } from './rate-limit.js';
+import { maskEmail } from './mask-email.js';
 
 type Variables = { userId: string };
 type TxnRow = typeof transactions.$inferSelect;
+
+const SPACE_ROLES = new Set<SpaceRole>(['owner', 'admin', 'contributor', 'viewer', 'child']);
+
+async function optionalSessionUserId(
+  c: import('hono').Context<{ Variables: Variables }>,
+): Promise<string | null> {
+  try {
+    const session = await getAuth().api.getSession({ headers: c.req.raw.headers });
+    if (session?.user?.id) return session.user.id;
+  } catch {
+    /* public path */
+  }
+  if (config.appEnv !== 'production') {
+    const devUser = c.req.header('x-user-id');
+    if (devUser) return devUser;
+  }
+  return null;
+}
 
 function s3Client() {
   return new S3Client({
@@ -657,9 +676,9 @@ export function createApp() {
   app.get('/spaces/:spaceId/safe-to-spend', async (c) => {
     const userId = c.get('userId');
     const spaceId = c.req.param('spaceId');
-    await requireMembership(userId, spaceId);
+    const membership = await requireMembership(userId, spaceId);
     const space = (await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1))[0]!;
-    const txns = await db()
+    const txnRows = await db()
       .select()
       .from(transactions)
       .where(
@@ -669,6 +688,7 @@ export function createApp() {
           isNull(transactions.deletedAt),
         ),
       );
+    const txns = filterVisibleEntries(membership.role as SpaceRole, userId, txnRows as TxnRow[]);
     const ledger: LedgerTransaction[] = txns.map((r) => ({
       id: r.id,
       spaceId: r.spaceId,
@@ -781,9 +801,21 @@ export function createApp() {
     const row = (await db().select().from(invitations).where(eq(invitations.id, inviteId)).limit(1))[0];
     if (!row) return c.json({ error: 'Invite not found' }, 404);
     const space = (await db().select().from(spaces).where(eq(spaces.id, row.spaceId)).limit(1))[0];
+
+    // Public GET: do not leak full invitee email unless the signed-in user matches.
+    let revealEmail = false;
+    const sessionUserId = await optionalSessionUserId(c);
+    if (sessionUserId) {
+      const profile = (await db().select().from(user).where(eq(user.id, sessionUserId)).limit(1))[0];
+      if (profile && profile.email.toLowerCase() === row.email.toLowerCase()) {
+        revealEmail = true;
+      }
+    }
+
     return c.json({
       id: row.id,
-      email: row.email,
+      email: revealEmail ? row.email : maskEmail(row.email),
+      emailMasked: !revealEmail,
       role: row.role,
       status: row.status,
       expiresAt: row.expiresAt?.toISOString() ?? null,
@@ -894,6 +926,26 @@ export function createApp() {
     const memberId = c.req.param('memberId');
     await requirePermission(userId, spaceId, 'manage_members');
     const body = await c.req.json<{ role: string }>();
+    if (!SPACE_ROLES.has(body.role as SpaceRole)) {
+      return c.json(
+        { error: 'role must be owner, admin, contributor, viewer, or child' },
+        400,
+      );
+    }
+    const existing = (
+      await db()
+        .select()
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.id, memberId),
+            eq(memberships.spaceId, spaceId),
+            isNull(memberships.deletedAt),
+          ),
+        )
+        .limit(1)
+    )[0];
+    if (!existing) return c.json({ error: 'Member not found' }, 404);
     await db()
       .update(memberships)
       .set({ role: body.role })
@@ -1136,11 +1188,13 @@ export function createApp() {
       return c.json({ jobId, status: 'queued' }, 202);
     }
 
-    // CSV sync
-    const rows = await db()
+    // CSV sync — apply child visibility filter (same as list endpoints)
+    const membership = await requireMembership(userId, spaceId);
+    const allRows = await db()
       .select()
       .from(transactions)
       .where(and(eq(transactions.spaceId, spaceId), isNull(transactions.deletedAt)));
+    const rows = filterVisibleEntries(membership.role as SpaceRole, userId, allRows as TxnRow[]);
     const header =
       'id,date,time,type,amount_minor,currency,category,description,creator,source,status';
     const lines = rows.map(

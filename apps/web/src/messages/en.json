@@ -222,10 +222,13 @@
     "pendingInvites": "Pending invites",
     "role": "Role",
     "roles": {
+      "owner": "Owner",
       "admin": "Admin",
       "contributor": "Contributor",
-      "viewer": "Viewer"
+      "viewer": "Viewer",
+      "child": "Child"
     },
+    "roleChangeFailed": "Could not update role",
     "noMembers": "No members yet.",
     "acceptTitle": "You’re invited",
     "acceptBody": "Join {space} as {role}. Use {email} to accept.",

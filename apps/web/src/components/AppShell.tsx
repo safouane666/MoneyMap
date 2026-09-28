@@ -21,10 +21,13 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { TransactionForm } from '@/components/TransactionForm';
 import { AiChat } from '@/components/AiChat';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PermissionGate } from '@/components/PermissionGate';
 import { PennyAvatar } from '@/components/penny/PennyAvatar';
 import { useToast } from '@/components/Toast';
 import { useLedger } from '@/lib/ledger';
+import { getActiveSpace } from '@/lib/demo-state';
 import { loadSetupSession } from '@/lib/setup-session';
+import { can } from '@clear-money/domain';
 
 const TIP_KEY = 'cm.penny.tip.day';
 
@@ -53,10 +56,12 @@ function todayKey() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useI18n();
-  const { offline, signedIn, sessionUser, showLoginPrompt, dismissLoginPrompt } = useLedger();
+  const { state, offline, signedIn, sessionUser, showLoginPrompt, dismissLoginPrompt } = useLedger();
   const { showPennyTip } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const space = getActiveSpace(state);
+  const canCreate = can(space.role, 'create');
 
   useEffect(() => {
     if (!pathname.startsWith('/app/home')) return;
@@ -144,10 +149,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <PennyAvatar pose="roll" size="nav" name={t('nav.ai')} className="h-11 w-11" />
             </button>
-            <Button size="sm" className="hidden md:inline-flex" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" />
-              {t('nav.add')}
-            </Button>
+            <PermissionGate role={space.role} action="create" fallback={null}>
+              <Button size="sm" className="hidden md:inline-flex" onClick={() => setAddOpen(true)}>
+                <Plus className="h-4 w-4" />
+                {t('nav.add')}
+              </Button>
+            </PermissionGate>
           </div>
         </header>
 
@@ -189,14 +196,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* FAB sits fully above the tab bar so the center Spaces tab stays tappable. */}
-      <button
-        type="button"
-        aria-label={t('nav.add')}
-        onClick={() => setAddOpen(true)}
-        className="cm-fab-pulse fixed start-1/2 z-50 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-brand text-white cm-shadow transition-transform duration-[var(--cm-motion-fast)] active:scale-95 rtl:translate-x-1/2 md:hidden bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))]"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {canCreate ? (
+        <button
+          type="button"
+          aria-label={t('nav.add')}
+          onClick={() => setAddOpen(true)}
+          className="cm-fab-pulse fixed start-1/2 z-50 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-brand text-white cm-shadow transition-transform duration-[var(--cm-motion-fast)] active:scale-95 rtl:translate-x-1/2 md:hidden bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))]"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      ) : null}
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface md:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5 gap-1 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2">
@@ -220,13 +229,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+      <Sheet open={addOpen && canCreate} onOpenChange={setAddOpen}>
         <SheetContent side="bottom" className="md:inset-y-0 md:start-auto md:end-0 md:max-w-md md:rounded-none md:border-s">
           <SheetHeader>
             <SheetTitle>{t('txn.addTitle')}</SheetTitle>
             <p className="text-sm text-ink-secondary">{t('txn.addSubtitle')}</p>
           </SheetHeader>
-          <TransactionForm onSaved={() => setAddOpen(false)} />
+          <PermissionGate role={space.role} action="create">
+            <TransactionForm onSaved={() => setAddOpen(false)} />
+          </PermissionGate>
         </SheetContent>
       </Sheet>
 

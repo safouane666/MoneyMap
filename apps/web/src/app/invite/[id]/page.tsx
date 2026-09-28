@@ -14,6 +14,7 @@ import { useLedger } from '@/lib/ledger';
 type InviteInfo = {
   id: string;
   email: string;
+  emailMasked?: boolean;
   role: string;
   status: string;
   expiresAt: string | null;

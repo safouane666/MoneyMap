@@ -34,7 +34,8 @@ type Invitation = {
   expiresAt: string | null;
 };
 
-const INVITE_ROLES = ['contributor', 'viewer', 'admin'] as const;
+const INVITE_ROLES = ['contributor', 'viewer', 'admin', 'child'] as const;
+const MEMBER_ROLES = ['owner', 'admin', 'contributor', 'viewer', 'child'] as const;
 
 export function SpaceMembersPanel({
   spaceId,
@@ -45,11 +46,13 @@ export function SpaceMembersPanel({
 }) {
   const { t } = useI18n();
   const canInvite = can(role, 'invite');
+  const canManage = can(role, 'manage_members');
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<(typeof INVITE_ROLES)[number]>('contributor');
   const [loading, setLoading] = useState(false);
+  const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -100,6 +103,32 @@ export function SpaceMembersPanel({
     }
   };
 
+  const onRoleChange = async (memberId: string, nextRole: string) => {
+    setRoleUpdating(memberId);
+    setError(null);
+    try {
+      const result = await apiFetch<{ ok: boolean; role: string }>(
+        `/spaces/${spaceId}/members/${memberId}/role`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ role: nextRole }),
+        },
+      );
+      if (result.offline || !result.data) {
+        setError(t('spaces.needOnline'));
+        return;
+      }
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, role: result.data!.role } : m)),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('spaces.roleChangeFailed'));
+      await load();
+    } finally {
+      setRoleUpdating(null);
+    }
+  };
+
   const copyLink = async () => {
     if (!inviteLink) return;
     try {
@@ -111,9 +140,16 @@ export function SpaceMembersPanel({
     }
   };
 
+  const roleLabel = (value: string) => {
+    const key = `spaces.roles.${value}`;
+    const translated = t(key);
+    return translated === key ? value : translated;
+  };
+
   return (
     <section id="members" className="space-y-4 scroll-mt-20">
       <h2 className="font-medium">{t('spaces.members')}</h2>
+      {error ? <p className="text-sm text-expense">{error}</p> : null}
       <ul className="space-y-2">
         {members.map((member) => (
           <li
@@ -124,7 +160,28 @@ export function SpaceMembersPanel({
               <p className="truncate font-medium">{member.name || member.email}</p>
               <p className="truncate text-sm text-ink-secondary">{member.email}</p>
             </div>
-            <Badge variant="secondary">{member.role}</Badge>
+            {canManage ? (
+              <Select
+                value={MEMBER_ROLES.includes(member.role as (typeof MEMBER_ROLES)[number])
+                  ? member.role
+                  : 'contributor'}
+                onValueChange={(v) => void onRoleChange(member.id, v)}
+                disabled={roleUpdating === member.id}
+              >
+                <SelectTrigger className="w-[9.5rem] shrink-0" aria-label={t('spaces.role')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MEMBER_ROLES.map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {roleLabel(value)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge variant="secondary">{roleLabel(member.role)}</Badge>
+            )}
           </li>
         ))}
         {!members.length ? (
@@ -160,13 +217,12 @@ export function SpaceMembersPanel({
                 <SelectContent>
                   {INVITE_ROLES.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {t(`spaces.roles.${value}`)}
+                      {roleLabel(value)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {error ? <p className="text-sm text-expense">{error}</p> : null}
             <Button type="submit" disabled={loading || !email.trim()}>
               {loading ? t('spaces.inviting') : t('spaces.invite')}
             </Button>
@@ -194,7 +250,7 @@ export function SpaceMembersPanel({
                     className="flex flex-wrap items-center justify-between gap-2 text-sm"
                   >
                     <span className="truncate">
-                      {invite.email} · {invite.role}
+                      {invite.email} · {roleLabel(invite.role)}
                     </span>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{invite.status}</Badge>

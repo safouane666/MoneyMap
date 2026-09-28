@@ -222,10 +222,13 @@
     "pendingInvites": "Invitations en attente",
     "role": "Rôle",
     "roles": {
+      "owner": "Propriétaire",
       "admin": "Admin",
       "contributor": "Contributeur",
-      "viewer": "Lecteur"
+      "viewer": "Lecteur",
+      "child": "Enfant"
     },
+    "roleChangeFailed": "Impossible de modifier le rôle",
     "noMembers": "Aucun membre pour l’instant.",
     "acceptTitle": "Vous êtes invité",
     "acceptBody": "Rejoindre {space} en tant que {role}. Utilisez {email} pour accepter.",

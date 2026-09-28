@@ -1,6 +1,7 @@
 import {
   computePeriodTotals,
   createId,
+  filterVisibleEntries,
   type Goal,
   type LedgerTransaction,
   type SpaceRole,
@@ -114,7 +115,9 @@ export function getActiveSpace(state: DemoState): DemoSpace {
 export function getSpaceTransactions(state: DemoState, spaceId?: string) {
   const id = spaceId ?? state.activeSpaceId;
   if (!id) return [];
-  return state.transactions.filter((t) => t.spaceId === id);
+  const space = state.spaces.find((s) => s.id === id);
+  const rows = state.transactions.filter((t) => t.spaceId === id);
+  return filterVisibleEntries(space?.role ?? 'owner', state.userId, rows);
 }
 
 export function getVisibleSpaceTransactions(state: DemoState, spaceId?: string) {

@@ -142,9 +142,9 @@ pnpm --filter @clear-money/web e2e
 
 ### Tasks
 
-- [ ] **P3.1** Invite email optional; copy-link accept flow stable; public invite GET does not over-expose PII.
-- [ ] **P3.2** Role change UI for admins/owners (API already has PATCH role — add allowlist validation).
-- [ ] **P3.3** Viewer cannot see create controls (PermissionGate); Child cannot see others’ entries (`filterVisibleEntries`).
+- [x] **P3.1** Invite email optional; copy-link accept flow stable; public invite GET does not over-expose PII.
+- [x] **P3.2** Role change UI for admins/owners (API already has PATCH role — add allowlist validation).
+- [x] **P3.3** Viewer cannot see create controls (PermissionGate); Child cannot see others’ entries (`filterVisibleEntries`).
 - [x] **P3.4** Space create validates `type` ∈ personal|project|family|company.
 
 ### Done when

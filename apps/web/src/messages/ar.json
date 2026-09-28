@@ -222,10 +222,13 @@
     "pendingInvites": "دعوات معلّقة",
     "role": "الدور",
     "roles": {
+      "owner": "مالك",
       "admin": "مسؤول",
       "contributor": "مساهم",
-      "viewer": "مشاهد"
+      "viewer": "مشاهد",
+      "child": "طفل"
     },
+    "roleChangeFailed": "تعذر تحديث الدور",
     "noMembers": "لا أعضاء بعد.",
     "acceptTitle": "أنت مدعو",
     "acceptBody": "انضم إلى {space} كـ {role}. استخدم {email} للقبول.",
