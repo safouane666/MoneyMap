@@ -187,6 +187,7 @@
     "invalidTarget": "Enter a valid target amount",
     "addProgress": "Add progress",
     "progressAmount": "Amount saved",
+    "savedManualNote": "Saved amounts are updated manually with Add progress — there is no contributions ledger yet.",
     "needLogin": "Sign in to create and sync goals.",
     "freeCap": "Free plan: up to 3 active goals. Upgrade for more.",
     "lockedTitle": "Goal limit reached",

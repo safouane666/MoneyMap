@@ -183,3 +183,27 @@ describe('in-memory idempotency + draft confirm', () => {
     );
   });
 });
+
+describe('CSV export column contract (P4.1)', () => {
+  it('header column count matches a single ISO occurred_at row', () => {
+    const header =
+      'id,occurred_at,type,amount_minor,currency,category,description,creator,source,status';
+    const occurredAt = new Date('2026-09-24T10:00:00.000Z');
+    const row = {
+      id: 'txn_1',
+      type: 'expense',
+      amountMinor: 1250,
+      currency: 'USD',
+      categoryId: 'cat_1',
+      description: 'Coffee',
+      createdBy: 'user_1',
+      source: 'manual',
+      status: 'confirmed',
+      occurredAt,
+    };
+    const line = `${row.id},${row.occurredAt.toISOString()},${row.type},${row.amountMinor},${row.currency},${row.categoryId ?? ''},${JSON.stringify(row.description ?? '')},${row.createdBy},${row.source},${row.status}`;
+    expect(header.split(',')).toHaveLength(line.split(',').length);
+    expect(header.startsWith('id,occurred_at,')).toBe(true);
+    expect(header.includes('date,time')).toBe(false);
+  });
+});

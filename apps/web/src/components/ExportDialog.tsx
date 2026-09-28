@@ -18,6 +18,10 @@ import {
 } from '@/components/ui/dialog';
 import { PermissionGate } from '@/components/PermissionGate';
 
+/**
+ * Client-side CSV only (intentional for v1). PDF/XLSX API jobs return metadata
+ * without file bytes; this dialog does not poll GET /jobs/:id.
+ */
 export function ExportDialog() {
   const { t, locale } = useI18n();
   const { state } = useLedger();

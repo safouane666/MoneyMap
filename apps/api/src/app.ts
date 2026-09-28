@@ -1161,6 +1161,8 @@ export function createApp() {
     const body = await c.req.json<{ format: 'csv' | 'xlsx' | 'pdf' }>();
     const profile = (await db().select().from(user).where(eq(user.id, userId)).limit(1))[0]!;
 
+    // PDF/XLSX enqueue a job that records metadata only (no file bytes / download URL yet).
+    // Web ExportDialog intentionally uses client-side CSV and does not poll these jobs.
     if (body.format === 'pdf' || body.format === 'xlsx') {
       const decision = canUseFeature(
         {
@@ -1185,7 +1187,15 @@ export function createApp() {
         payload: { format: body.format },
         idempotencyKey: createIdempotencyKey(),
       });
-      return c.json({ jobId, status: 'queued' }, 202);
+      return c.json(
+        {
+          jobId,
+          status: 'queued',
+          bytesAvailable: false,
+          message: 'Export job queued; file bytes are not produced yet. Use CSV for downloads.',
+        },
+        202,
+      );
     }
 
     // CSV sync — apply child visibility filter (same as list endpoints)
@@ -1195,8 +1205,9 @@ export function createApp() {
       .from(transactions)
       .where(and(eq(transactions.spaceId, spaceId), isNull(transactions.deletedAt)));
     const rows = filterVisibleEntries(membership.role as SpaceRole, userId, allRows as TxnRow[]);
+    // One ISO column (occurred_at) — keep header in sync with row shape
     const header =
-      'id,date,time,type,amount_minor,currency,category,description,creator,source,status';
+      'id,occurred_at,type,amount_minor,currency,category,description,creator,source,status';
     const lines = rows.map(
       (r) =>
         `${r.id},${r.occurredAt.toISOString()},${r.type},${r.amountMinor},${r.currency},${r.categoryId ?? ''},${JSON.stringify(r.description ?? '')},${r.createdBy},${r.source},${r.status}`,

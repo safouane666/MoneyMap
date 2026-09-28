@@ -33,7 +33,6 @@ describe('getSpaceTotals parity with domain', () => {
         {
           id: 'space_personal',
           name: 'Personal',
-          type: 'personal',
           currency: 'USD',
           role: 'owner',
         },

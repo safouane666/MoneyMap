@@ -695,7 +695,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
         throw new Error(data.error || t('ai.outOfCredits'));
       }
-      if (!res.ok) throw new Error(data.error || t('ai.error'));
+      if (!res.ok) throw new Error(t('ai.error'));
       if (typeof data.usage?.remaining === 'number') setCreditsLeft(data.usage.remaining);
 
       // Capture spend draft early so later "create category" / "yes" turns can finish the write.
@@ -797,7 +797,8 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         {
           id: `e_${Date.now()}`,
           role: 'assistant',
-          content: error instanceof Error ? error.message : t('ai.error'),
+          // Prefer i18n copy — avoid surfacing raw AI provider/host error strings.
+          content: t('ai.error'),
         },
       ]);
       throw error;

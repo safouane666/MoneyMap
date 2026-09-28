@@ -76,6 +76,7 @@ describe('providers', () => {
     expect(result.kind).toBe('export');
     if (result.kind === 'export') {
       expect(result.format).toBe('xlsx');
+      expect(result.bytesUploaded).toBe(false);
       expect(result.sheets).toEqual([
         'Transactions',
         'Summary',
@@ -95,6 +96,7 @@ describe('providers', () => {
     expect(result.kind).toBe('export');
     if (result.kind === 'export') {
       expect(result.format).toBe('pdf');
+      expect(result.bytesUploaded).toBe(false);
       expect(result.storageKey).toContain('exports/');
     }
   });

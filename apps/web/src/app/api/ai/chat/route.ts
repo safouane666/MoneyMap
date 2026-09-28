@@ -189,8 +189,18 @@ export async function POST(req: Request) {
       throw inner;
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'AI chat failed';
-    const status = message.includes('not configured') ? 503 : 502;
-    return NextResponse.json({ error: message }, { status });
+    const raw = error instanceof Error ? error.message : 'AI chat failed';
+    const notConfigured = /not configured|AI_API_KEY/i.test(raw);
+    const status = notConfigured ? 503 : 502;
+    // Do not leak raw provider/host strings to the client (core ledger stays usable without AI).
+    return NextResponse.json(
+      {
+        error: notConfigured
+          ? 'Penny is not configured on this server.'
+          : 'Penny is temporarily unavailable.',
+        code: notConfigured ? 'ai_not_configured' : 'ai_provider',
+      },
+      { status },
+    );
   }
 }

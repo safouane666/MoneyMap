@@ -187,6 +187,7 @@
     "invalidTarget": "Montant invalide",
     "addProgress": "Ajouter une progression",
     "progressAmount": "Montant épargné",
+    "savedManualNote": "Le montant épargné se met à jour manuellement via Ajouter une progression — pas encore de journal des contributions.",
     "needLogin": "Connectez-vous pour créer des objectifs.",
     "freeCap": "Gratuit : 3 objectifs actifs. Passez à Plus pour plus.",
     "lockedTitle": "Limite atteinte",

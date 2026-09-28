@@ -53,7 +53,10 @@ export interface ExportResult {
   kind: 'export';
   format: 'xlsx' | 'pdf';
   filename: string;
+  /** Planned object-storage key — bytes are not uploaded yet. */
   storageKey: string;
+  /** False until a real file is written to storage. */
+  bytesUploaded: false;
   sheets?: string[];
   requiresConfirmation: false;
 }

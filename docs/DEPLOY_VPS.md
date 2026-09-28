@@ -114,6 +114,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 
 ## Notes
 
+- The **worker** service is part of `docker-compose.prod.yml` (same stack as api/web). Locally you can also run it with `pnpm --filter @clear-money/worker start` (or `dev`). Job status is available via `GET /jobs/:id`; the web app uses client-side CSV export and does not poll jobs.
 - Mobile release builds (Phase 6) should use `https://your.domain.example/cm-api` as the API base — never localhost.
 - `BETA_FREE_MODE=true` keeps billing in free/beta mode until Stripe live is intentional.
 - Privacy/terms routes are hosted at `/privacy` and `/terms`; replace placeholder copy with legal text before store listing.

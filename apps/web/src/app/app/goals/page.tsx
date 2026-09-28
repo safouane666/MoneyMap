@@ -164,6 +164,8 @@ export default function GoalsPage() {
         <p className="text-xs text-ink-muted">{t('goals.freeCap')}</p>
       ) : null}
 
+      <p className="text-sm text-ink-secondary">{t('goals.savedManualNote')}</p>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">{t('goals.safeToSpend')}</CardTitle>

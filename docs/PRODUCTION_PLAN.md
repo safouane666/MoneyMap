@@ -166,11 +166,11 @@ pnpm --filter @clear-money/api test
 
 ### Tasks
 
-- [ ] **P4.1** CSV export: fix API header/body mismatch if API path is used; keep client CSV only if intentional.
-- [ ] **P4.2** PDF/XLSX: produce real files in object storage **or** hide async export UI until ready.
-- [ ] **P4.3** Worker runs under process manager; job status queued → running → succeeded/failed visible if UI uses jobs.
-- [ ] **P4.4** Goals: contributions path or clear UX that `savedMinor` is manual only.
-- [ ] **P4.5** OCR / voice / AI monthly: without keys, UI must degrade (manual entry works); never block core ledger.
+- [x] **P4.1** CSV export: fix API header/body mismatch if API path is used; keep client CSV only if intentional.
+- [x] **P4.2** PDF/XLSX: produce real files in object storage **or** hide async export UI until ready.
+- [x] **P4.3** Worker runs under process manager; job status queued → running → succeeded/failed visible if UI uses jobs.
+- [x] **P4.4** Goals: contributions path or clear UX that `savedMinor` is manual only.
+- [x] **P4.5** OCR / voice / AI monthly: without keys, UI must degrade (manual entry works); never block core ledger.
 
 ### Done when
 
@@ -183,6 +183,7 @@ pnpm --filter @clear-money/api test
 pnpm --filter @clear-money/worker test
 ```
 
+**Phase 4 notes:** Web `ExportDialog` uses client-side CSV only (no PDF/XLSX UI, no job polling). API sync CSV uses a single `occurred_at` ISO column. Async PDF/XLSX jobs may still be queued and return metadata with `bytesAvailable`/`bytesUploaded: false` — they do not produce downloadable files yet. Worker is in `compose.prod` and runnable via `pnpm --filter @clear-money/worker start|dev`; see `docs/DEPLOY_VPS.md`.
 ---
 
 ## Phase 5 — VPS stack in the monorepo (Compose + Nginx)

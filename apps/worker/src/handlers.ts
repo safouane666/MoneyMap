@@ -25,11 +25,13 @@ function buildExport(
   const filename = `ClearMoney_${spaceId}_${format}_${range}_${generated}.${format === 'xlsx' ? 'xlsx' : 'pdf'}`;
   const storageKey = `exports/${spaceId}/${createId('job')}.${format === 'xlsx' ? 'xlsx' : 'pdf'}`;
 
+  // Metadata placeholder only — no real PDF/XLSX bytes are written to storage yet.
   return {
     kind: 'export',
     format,
     filename,
     storageKey,
+    bytesUploaded: false,
     sheets:
       format === 'xlsx'
         ? [
