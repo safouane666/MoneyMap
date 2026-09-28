@@ -38,7 +38,7 @@ Legend:
 | --- | --- | --- | --- |
 | S1 | Migrations apply on fresh database | Manual / script | `pnpm db:migrate` against empty Postgres |
 | S2 | Seed is idempotent | Partial | `packages/db/src/seed.ts` (re-run exits early) + Manual re-run |
-| S3 | Viewer create/edit/invite/settings rejected; Owner allowed | Automated (API) | `apps/api/src/__tests__/**` (permissions / spaces) |
+| S3 | Viewer create/edit/invite/settings rejected; Owner allowed | Automated (domain) | `apps/api/src/__tests__/smoke.test.ts`, `apps/api/src/app.test.ts` (no full HTTP matrix yet) |
 | S4 | Auth surface only unauthenticated routes besides public | Manual review | `apps/api` middleware route list |
 
 ---
@@ -47,10 +47,10 @@ Legend:
 
 | ID | Acceptance | Coverage | Location |
 | --- | --- | --- | --- |
-| A1 | Report totals match income − expenses fixture | Automated | `apps/api/src/__tests__/**` report / totals |
-| A2 | Offline retry same idempotency key does not duplicate | Automated | `apps/api/src/__tests__/**` transactions; `apps/mobile/src/offline/queue.test.ts` |
-| A3 | Voice/receipt drafts require explicit confirm | Automated | Domain `requiresConfirmation` + API draft status tests |
-| A4 | Membership filters every Space query | Automated | API membership middleware tests |
+| A1 | Report totals match income − expenses fixture | Automated (domain) | `packages/domain/src/domain.test.ts`; API totals covered in `apps/api/src/app.test.ts` |
+| A2 | Offline retry same idempotency key does not duplicate | Automated | `apps/api/src/app.test.ts` (in-memory); `apps/mobile/src/offline/queue.test.ts` |
+| A3 | Voice/receipt drafts require explicit confirm | Automated | Domain `requiresConfirmation` + `apps/api/src/__tests__/smoke.test.ts` / `app.test.ts` |
+| A4 | Membership filters every Space query | Partial | Domain + middleware in `apps/api/src/app.ts`; no dedicated HTTP membership suite yet |
 
 ---
 
@@ -113,9 +113,9 @@ Legend:
 
 | ID | Acceptance | Coverage | Location |
 | --- | --- | --- | --- |
-| P1 | API matrix for all five roles | Automated | `apps/api/src/__tests__/**` |
+| P1 | API matrix for all five roles | Automated (domain) | `packages/domain/src/domain.test.ts` + `apps/api/src/__tests__/smoke.test.ts` |
 | P2 | Viewer sees explanation instead of create control | Manual / e2e | Web + mobile Spaces / Home |
-| P3 | Child cannot read another member’s entries | Automated | API filterVisibleEntries + API tests |
+| P3 | Child cannot read another member’s entries | Automated | `filterVisibleEntries` in domain + `apps/api/src/app.test.ts` / smoke |
 
 ---
 
@@ -123,9 +123,9 @@ Legend:
 
 | ID | Acceptance | Coverage | Location |
 | --- | --- | --- | --- |
-| X1 | Account deletion removes auth access and personal data | Automated | API deletion tests |
-| X2 | Shared-Space records remain; actor detached | Automated | API deletion tests |
-| X3 | Display currency change leaves `amountMinor` unchanged | Automated | Domain format vs store + API settings test |
+| X1 | Account deletion removes auth access and personal data | Partial | `POST /account/delete` in `apps/api/src/app.ts`; no dedicated HTTP deletion suite yet |
+| X2 | Shared-Space records remain; actor detached | Partial | Same as X1 — manual / future integration |
+| X3 | Display currency change leaves `amountMinor` unchanged | Automated | Domain format vs store + settings path review |
 
 ---
 
@@ -133,10 +133,10 @@ Legend:
 
 | ID | Acceptance | Coverage | Location |
 | --- | --- | --- | --- |
-| B1 | Free-only / disabled config renders no payment UI | Automated | Domain `buildPublicBillingConfig` + web billing tests |
-| B2 | Sandbox rejects live Stripe credentials | Automated | API billing config tests |
-| B3 | Webhook fixture flips Plus entitlement | Automated | API Stripe webhook tests |
-| B4 | Free user can still read/write core transactions | Automated | API entitlements + transaction tests |
+| B1 | Free-only / disabled config renders no payment UI | Automated | Domain `buildPublicBillingConfig` + `apps/web` billing tests / `app.test.ts` |
+| B2 | Sandbox rejects live Stripe credentials | Automated | Billing config + `apps/api/src/app.ts` checkout guards |
+| B3 | Webhook fixture flips Plus entitlement | Partial | Production unsigned stubs rejected (`billing-webhook.ts` / smoke); full entitlement flip still manual when Stripe live |
+| B4 | Free user can still read/write core transactions | Automated | Domain entitlements + transaction create path |
 | B5 | `BETA_FREE_MODE` hides upgrade CTAs | Manual + Automated | Public config projection |
 
 ---

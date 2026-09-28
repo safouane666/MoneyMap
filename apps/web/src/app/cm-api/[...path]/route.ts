@@ -52,9 +52,11 @@ async function proxy(req: NextRequest, pathParts: string[]) {
   let upstream: Response;
   try {
     upstream = await fetch(target, init);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Upstream API unreachable';
-    return NextResponse.json({ error: message }, { status: 502 });
+  } catch {
+    return NextResponse.json(
+      { error: 'Upstream API unreachable', code: 'upstream_unreachable' },
+      { status: 502 },
+    );
   }
 
   const out = new Headers();

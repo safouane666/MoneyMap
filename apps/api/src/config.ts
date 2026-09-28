@@ -63,6 +63,7 @@ export const config = {
   s3Bucket: env('S3_BUCKET', 'clearmoney'),
   s3Region: env('S3_REGION', 'us-east-1'),
   stripeSecretKey: env('STRIPE_SECRET_KEY'),
+  stripeWebhookSecret: env('STRIPE_WEBHOOK_SECRET'),
   webOrigins: [
     env('WEB_URL', 'http://localhost:8259'),
     'http://localhost:8259',

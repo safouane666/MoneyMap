@@ -1,9 +1,18 @@
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { initSentry } from '../src/lib/sentry';
+import { offlineQueue } from '../src/offline/client';
+import { startReconcileOnReconnect } from '../src/offline/reconcile-on-reconnect';
 import { colors } from '../src/theme/tokens';
 
 export default function RootLayout() {
+  useEffect(() => {
+    initSentry();
+    return startReconcileOnReconnect(offlineQueue);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />

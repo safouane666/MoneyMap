@@ -47,6 +47,8 @@ import { getAuth } from './auth.js';
 import { db, requireMembership, requirePermission } from './db.js';
 import { rateLimit } from './rate-limit.js';
 import { maskEmail } from './mask-email.js';
+import { gateBillingWebhook } from './billing-webhook.js';
+import { publicInternalError, sanitizeJobError } from './public-errors.js';
 
 type Variables = { userId: string };
 type TxnRow = typeof transactions.$inferSelect;
@@ -838,7 +840,11 @@ export function createApp() {
     if (!profile) return c.json({ error: 'User not found' }, 404);
     if (profile.email.toLowerCase() !== row.email.toLowerCase()) {
       return c.json(
-        { error: `Sign in as ${row.email} to accept this invite` },
+        {
+          error: 'Sign in with the invited email address to accept this invite',
+          code: 'invite_email_mismatch',
+          emailHint: maskEmail(row.email),
+        },
         403,
       );
     }
@@ -1223,7 +1229,8 @@ export function createApp() {
     const jobId = c.req.param('jobId');
     const row = (await db().select().from(jobs).where(eq(jobs.id, jobId)).limit(1))[0];
     if (!row || row.userId !== userId) return c.json({ error: 'Not found' }, 404);
-    return c.json(row);
+    const safe = sanitizeJobError(row.error);
+    return c.json({ ...row, error: safe.error, errorCode: safe.errorCode });
   });
 
   app.post('/ai/voice-draft', async (c) => {
@@ -1643,12 +1650,35 @@ export function createApp() {
   });
 
   app.post('/billing/webhook', async (c) => {
-    // Stripe webhook stub — verifies mode, never trusts client entitlements
-    const mode = process.env.BILLING_MODE;
-    if (mode === 'live' && config.appEnv !== 'production') {
-      return c.json({ error: 'Live webhooks only in production' }, 400);
+    // Never trusts client entitlements. Production rejects unsigned stubs (P7.4).
+    const gate = gateBillingWebhook({
+      appEnv: config.appEnv,
+      billingMode: process.env.BILLING_MODE,
+      hasWebhookSecret: Boolean(config.stripeWebhookSecret),
+      hasSignature: Boolean(c.req.header('stripe-signature')),
+      hasStripeSecret: Boolean(config.stripeSecretKey),
+    });
+
+    if (gate.action === 'reject') {
+      return c.json({ error: gate.error, code: gate.code }, gate.status);
     }
-    return c.json({ received: true });
+
+    if (gate.action === 'allow_stub') {
+      return c.json({ received: true, stub: true });
+    }
+
+    // verify_stripe — signature required; entitlement flips still need a live handler.
+    try {
+      const Stripe = (await import('stripe')).default;
+      const stripe = new Stripe(config.stripeSecretKey);
+      const rawBody = await c.req.text();
+      const signature = c.req.header('stripe-signature')!;
+      stripe.webhooks.constructEvent(rawBody, signature, config.stripeWebhookSecret);
+      // Verified receipt only — full entitlement sync is a follow-up when Stripe live is enabled.
+      return c.json({ received: true });
+    } catch {
+      return c.json({ error: 'Invalid webhook signature', code: 'webhook_invalid' }, 400);
+    }
   });
 
   app.get('/account/export', async (c) => {
@@ -1672,7 +1702,11 @@ export function createApp() {
 
   app.onError((err, c) => {
     const status = (err as Error & { status?: number }).status ?? 500;
-    return c.json({ error: err.message }, status as 400);
+    if (status >= 500) {
+      console.error('[api]', err);
+      return c.json(publicInternalError(), status as 500);
+    }
+    return c.json({ error: err.message, code: 'request_error' }, status as 400);
   });
 
   return app;

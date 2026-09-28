@@ -230,7 +230,7 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://$DOMAIN/
 - [x] **P6.2** Release builds set `EXPO_PUBLIC_API_URL` (or EAS env) to `https://<domain>/cm-api` or the public API origin — **never** `localhost` / LAN IPs in release profiles.
 - [x] **P6.3** Fix sync path to `POST /spaces/:spaceId/transactions` with idempotency; share one store between Add and Activity.
 - [x] **P6.4** Home totals from persisted/synced transactions.
-- [ ] **P6.5** Offline queue: enqueue when offline; `reconcile` on reconnect without duplicates (use existing `src/offline` tests as contract).
+- [x] **P6.5** Offline queue: enqueue when offline; `reconcile` on reconnect without duplicates (use existing `src/offline` tests as contract).
 - [ ] **P6.6** Replace placeholder icons/splash with real assets (512+).
 - [x] **P6.7** Add `eas.json` with profiles:
   - `preview` / `apk` → Android **APK** for sideload / internal testers
@@ -266,16 +266,20 @@ pnpm --filter @clear-money/mobile typecheck
 
 ### Tasks
 
-- [ ] **P7.1** Crash reporting (Sentry or equivalent) on web + mobile.
-- [ ] **P7.2** Structured API error codes; no raw provider strings in user-facing UI.
-- [ ] **P7.3** Backup/restore runbook for Postgres on the VPS; migration discipline.
-- [ ] **P7.4** Security pass: webhook signature verification if Stripe live; invite PII; disable stub billing webhook in production; Nginx hardening (headers, rate limit at edge optional).
-- [ ] **P7.5** Update `docs/ACCEPTANCE.md` so claimed test paths exist; add missing API integration tests under `apps/api/src/__tests__` or stop claiming them.
+- [ ] **P7.1** Crash reporting (Sentry or equivalent) on web + mobile.  
+  _Partial (no SaaS account):_ optional no-op stubs at `apps/web/src/lib/sentry.ts` + `apps/mobile/src/lib/sentry.ts` behind `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` / `EXPO_PUBLIC_SENTRY_DSN`. Leave unset in prod until a real DSN exists; then install the SDK and wire `init`. Forced-crash verification deferred (blocker B6).
+- [x] **P7.2** Structured API error codes; no raw provider strings in user-facing UI.  
+  Penny chat already maps to codes; job errors sanitized on `GET /jobs/:id`; `/cm-api` proxy returns `upstream_unreachable`; API 5xx uses `internal_error`.
+- [x] **P7.3** Backup/restore runbook for Postgres on the VPS; migration discipline — `docs/BACKUP.md` (+ link from `DEPLOY_VPS.md`).
+- [x] **P7.4** Security pass: production rejects unsigned Stripe webhook stubs (`501` / signature verify); invite public GET masked + accept mismatch no longer leaks full email; Nginx security headers in `deploy/nginx`. Rate limit at edge still optional.
+- [x] **P7.5** Update `docs/ACCEPTANCE.md` so claimed test paths exist; smoke suite at `apps/api/src/__tests__/smoke.test.ts` (+ existing `app.test.ts`).
 
 ### Done when
 
-- One forced crash appears in the error tracker.
-- Production config checklist in `docs/ACCEPTANCE.md` is fully checked.
+- One forced crash appears in the error tracker. _(Deferred until B6 — Sentry DSN.)_
+- Production config checklist in `docs/ACCEPTANCE.md` is fully checked. _(Manual on VPS.)_
+
+**Phase 7 notes:** Code/docs hardening above is done without inventing VPS TLS or a Sentry account. Remaining “Done when” items need human DSN + live deploy.
 
 ---
 
@@ -325,6 +329,7 @@ Human-required inputs (agents must not invent):
 | B3 | Privacy/terms legal copy | Human |
 | B4 | Whether v1 mobile is free-only | Human (recommend: yes) |
 | B5 | Play Console (only if publishing AAB beyond sideload APK) | Human |
+| B6 | Sentry (or equivalent) DSN — blocks P7.1 forced-crash Done criterion | Human |
 
 ---
 
