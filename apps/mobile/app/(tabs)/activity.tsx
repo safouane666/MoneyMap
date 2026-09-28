@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { t } from '@clear-money/i18n';
-import { createAsyncStorageStore } from '../../src/offline/store';
+import { offlineQueue, offlineStore } from '../../src/offline/client';
 import type { OfflineTransaction } from '../../src/offline/queue';
 import { colors, radius, space } from '../../src/theme/tokens';
 
@@ -12,9 +12,10 @@ export default function ActivityScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void createAsyncStorageStore()
-        .list()
-        .then(setRows);
+      void (async () => {
+        await offlineQueue.reconcile().catch(() => undefined);
+        setRows(await offlineStore.list());
+      })();
     }, []),
   );
 

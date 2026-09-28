@@ -5,7 +5,6 @@ import { CategoryBreakdown } from '@/components/CategoryBreakdown';
 import { PeriodSelector, type Period } from '@/components/PeriodSelector';
 import { ExportDialog } from '@/components/ExportDialog';
 import { SummaryCard } from '@/components/SummaryCard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useI18n } from '@/lib/i18n';
 import { useLedger } from '@/lib/ledger';
 import {
@@ -48,7 +47,6 @@ export default function ReportsPage() {
   const scoped = useMemo(() => ({ ...state, transactions: filtered }), [filtered, state]);
   const totals = useMemo(() => getSpaceTotals(scoped, space.id), [scoped, space.id]);
   const breakdown = useMemo(() => categoryBreakdown(scoped, space.id), [scoped, space.id]);
-  const count = filtered.length;
 
   return (
     <div className="space-y-6">
@@ -87,24 +85,10 @@ export default function ReportsPage() {
         />
       </div>
 
-      <Tabs defaultValue="categories" className="animate-reveal stagger-2">
-        <TabsList>
-          <TabsTrigger value="categories">{t('app.categories')}</TabsTrigger>
-          <TabsTrigger value="time">{t('app.time')}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="categories">
-          <div className="rounded-[var(--cm-radius-card)] border border-border bg-surface p-5 cm-shadow">
-            <CategoryBreakdown items={breakdown} currency={space.currency} locale={locale} />
-          </div>
-        </TabsContent>
-        <TabsContent value="time">
-          <div className="rounded-[var(--cm-radius-card)] border border-border bg-surface p-5 text-sm text-ink-secondary cm-shadow">
-            {count < 5
-              ? t('app.timeEmpty')
-              : t('app.timeReady').replace('{count}', String(count)).replace('{space}', space.name)}
-          </div>
-        </TabsContent>
-      </Tabs>
+      <div className="rounded-[var(--cm-radius-card)] border border-border bg-surface p-5 cm-shadow animate-reveal stagger-2">
+        <h2 className="mb-4 text-sm font-medium text-ink-secondary">{t('app.categories')}</h2>
+        <CategoryBreakdown items={breakdown} currency={space.currency} locale={locale} />
+      </div>
     </div>
   );
 }

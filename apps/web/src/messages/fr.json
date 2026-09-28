@@ -102,7 +102,7 @@
     "googleFailed": "Impossible de démarrer Google",
     "googleLanHint": "Google refuse les IP LAN. Sur ce PC on ouvre localhost ; sur téléphone utilisez l’e-mail.",
     "orEmail": "ou par e-mail",
-    "serverUnreachable": "Serveur injoignable. Ouvrez http://192.168.38.141:8259 sur le même Wi‑Fi.",
+    "serverUnreachable": "Serveur injoignable. Vérifiez que l’API tourne et ouvrez l’app depuis la même adresse que votre navigateur.",
     "signUpFailed": "Inscription échouée",
     "signInFailed": "Connexion échouée"
   },
@@ -250,6 +250,9 @@
     "signingOut": "Déconnexion…",
     "exportData": "Exporter mes données",
     "deleteAccount": "Supprimer le compte",
+    "exportDone": "Téléchargement démarré",
+    "exportFailed": "Impossible d’exporter vos données",
+    "deleteFailed": "Impossible de supprimer le compte",
     "currency": "Devise",
     "currencyHint": "S’applique à l’espace actif et aux nouvelles écritures.",
     "currencySaved": "Devise mise à jour",

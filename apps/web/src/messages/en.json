@@ -102,7 +102,7 @@
     "googleFailed": "Could not start Google sign-in",
     "googleLanHint": "Google blocks LAN IPs. On this PC we’ll open localhost; on a phone use email instead.",
     "orEmail": "or use email",
-    "serverUnreachable": "Cannot reach the server. Open http://192.168.38.141:8259 on the same Wi‑Fi (phones only need that address — not port 3011).",
+    "serverUnreachable": "Cannot reach the server. Make sure the API is running and open this app from the same address your browser is using (not a different host or port).",
     "signUpFailed": "Sign up failed",
     "signInFailed": "Sign in failed"
   },
@@ -261,6 +261,9 @@
     "signingOut": "Signing out…",
     "exportData": "Export my data",
     "deleteAccount": "Delete account",
+    "exportDone": "Download started",
+    "exportFailed": "Could not export your data",
+    "deleteFailed": "Could not delete your account",
     "currency": "Currency",
     "currencyHint": "Applies to the active space and new entries. Existing amounts keep their stored currency code.",
     "currencySaved": "Currency updated",

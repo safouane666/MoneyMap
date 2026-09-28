@@ -42,7 +42,7 @@ import {
   billingCustomers,
   pennyTurns,
 } from '@clear-money/db';
-import { billingPublicConfig, config, env } from './config.js';
+import { billingPublicConfig, config } from './config.js';
 import { getAuth } from './auth.js';
 import { db, requireMembership, requirePermission } from './db.js';
 import { rateLimit } from './rate-limit.js';
@@ -308,6 +308,16 @@ export function createApp() {
   app.post('/spaces', async (c) => {
     const userId = c.get('userId');
     const body = await c.req.json<{ name: string; type: string; currency?: string }>();
+    const allowedSpaceTypes = new Set(['personal', 'project', 'family', 'company']);
+    if (!body.name?.trim()) {
+      return c.json({ error: 'name is required' }, 400);
+    }
+    if (!allowedSpaceTypes.has(body.type)) {
+      return c.json(
+        { error: 'type must be personal, project, family, or company' },
+        400,
+      );
+    }
     const profile = (await db().select().from(user).where(eq(user.id, userId)).limit(1))[0]!;
     // Count spaces this user owns (personal allotment), not every membership.
     const owned = await db()
@@ -403,6 +413,31 @@ export function createApp() {
       confirm?: boolean;
     }>();
 
+    const allowedTypes = new Set(['income', 'expense', 'transfer']);
+    if (!allowedTypes.has(body.type)) {
+      return c.json({ error: 'Invalid transaction type' }, 400);
+    }
+    if (!Number.isFinite(body.amountMinor) || body.amountMinor <= 0) {
+      return c.json({ error: 'amountMinor must be a positive integer' }, 400);
+    }
+    if (!body.currency || typeof body.currency !== 'string') {
+      return c.json({ error: 'currency is required' }, 400);
+    }
+    if (!body.occurredAt || Number.isNaN(Date.parse(body.occurredAt))) {
+      return c.json({ error: 'occurredAt must be a valid ISO date' }, 400);
+    }
+
+    const spaceRow = (
+      await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1)
+    )[0];
+    if (!spaceRow) return c.json({ error: 'Space not found' }, 404);
+    if (body.currency !== spaceRow.currency) {
+      return c.json(
+        { error: `currency must match space currency (${spaceRow.currency})` },
+        400,
+      );
+    }
+
     const idempotencyKey = body.idempotencyKey ?? createIdempotencyKey();
     const existing = await db()
       .select()
@@ -424,7 +459,7 @@ export function createApp() {
       id,
       spaceId,
       type: body.type,
-      amountMinor: body.amountMinor,
+      amountMinor: Math.trunc(body.amountMinor),
       currency: body.currency,
       categoryId: body.categoryId ?? null,
       description: body.description ?? null,
@@ -469,9 +504,13 @@ export function createApp() {
     const userId = c.get('userId');
     const spaceId = c.req.param('spaceId');
     const txnId = c.req.param('txnId');
-    const membership = await requireMembership(userId, spaceId);
+    await requireMembership(userId, spaceId);
     const row = (
-      await db().select().from(transactions).where(eq(transactions.id, txnId)).limit(1)
+      await db()
+        .select()
+        .from(transactions)
+        .where(and(eq(transactions.id, txnId), eq(transactions.spaceId, spaceId)))
+        .limit(1)
     )[0];
     if (!row) return c.json({ error: 'Not found' }, 404);
     if (row.createdBy === userId) {
@@ -482,7 +521,7 @@ export function createApp() {
     await db()
       .update(transactions)
       .set({ deletedAt: new Date() })
-      .where(eq(transactions.id, txnId));
+      .where(and(eq(transactions.id, txnId), eq(transactions.spaceId, spaceId)));
     await db().insert(auditLog).values({
       id: createId('aud'),
       spaceId,
@@ -492,7 +531,6 @@ export function createApp() {
       entityId: txnId,
       beforeSummary: `${row.type} ${row.amountMinor}`,
     });
-    void membership;
     return c.json({ ok: true });
   });
 
@@ -1591,13 +1629,14 @@ async function authMiddleware(
     /* fall through */
   }
 
-  const allowDevHeader =
-    config.appEnv !== 'production' || env('ALLOW_DEV_USER_HEADER', 'false') === 'true';
-  const devUser = c.req.header('x-user-id');
-  if (allowDevHeader && devUser) {
-    c.set('userId', devUser);
-    await next();
-    return;
+  // Dev-only impersonation. Hard-off when APP_ENV=production (no env escape hatch).
+  if (config.appEnv !== 'production') {
+    const devUser = c.req.header('x-user-id');
+    if (devUser) {
+      c.set('userId', devUser);
+      await next();
+      return;
+    }
   }
 
   return c.json({ error: 'Unauthorized' }, 401);

@@ -25,7 +25,7 @@ Internet → Nginx (443)
 Mobile APK / iOS build ──HTTPS──→ same API origin (or same host /cm-api)
 ```
 
-**Not in the repo today:** production Compose stack for api/web/worker/nginx (only local Postgres+MinIO), no Nginx configs, no EAS profiles, mobile still points at localhost and fakes auth.
+**Not in the repo today:** live TLS on a real domain is still human-gated (P5.6 / blocker B1). Mobile has EAS profiles + auth/offline wiring; EAS `projectId` / `YOUR_DOMAIN` are placeholders until a human runs `eas init` and sets the production API URL.
 
 ## How agents must work
 
@@ -42,14 +42,13 @@ Mobile APK / iOS build ──HTTPS──→ same API origin (or same host /cm-ap
 | --- | --- |
 | Domain / DB / API / Worker | Substantial; some stubs and weak validation |
 | Web (`apps/web`) | Demo-capable after fresh sign-up; gaps in settings privacy, seed login, some UI stubs |
-| Mobile (`apps/mobile`) | Expo Go prototype; fake auth; no EAS / APK / iOS pipeline |
-| VPS stack | Local compose = Postgres + MinIO only; **no Nginx**, api/web not containerized for VPS |
+| Mobile (`apps/mobile`) | Expo app; email auth + offline store wired; EAS profiles present; APK/iOS binaries still need human EAS/Apple setup |
+| VPS stack | Compose prod overlay + Nginx scaffolding in-repo; live HTTPS on a real domain still needs human DNS/certs (P5.6) |
 
 Known open demo gaps (fix early if touching those areas):
 
 - Seed creates `demo@clearmoney.app` users **without** Better Auth `account` password rows (`packages/db/src/seed.ts`).
 - Settings “Export my data” and “Confirm delete” are not wired (`apps/web/src/app/app/settings/page.tsx`).
-- Mobile sign-in ignores credentials (`apps/mobile/app/auth/sign-in.tsx`).
 
 ---
 
@@ -60,9 +59,9 @@ Known open demo gaps (fix early if touching those areas):
 ### Tasks
 
 - [x] **P0.1** Ensure `.gitignore` excludes `.env*`, `.lan-logs`, `tmp*`, build outputs.
-- [ ] **P0.2** Align `.env.example` with real required vars (no secrets). Document `BETTER_AUTH_URL` as the **web origin** (cookie host), not the API port, when using `/cm-api` proxy.
-- [ ] **P0.3** Add/confirm root scripts: `typecheck`, `test`, `db:migrate`, `db:seed`.
-- [ ] **P0.4** Remove or gate non-production shortcuts when `APP_ENV=production` (e.g. `x-user-id` impersonation in `apps/api/src/app.ts`).
+- [x] **P0.2** Align `.env.example` with real required vars (no secrets). Document `BETTER_AUTH_URL` as the **web origin** (cookie host), not the API port, when using `/cm-api` proxy.
+- [x] **P0.3** Add/confirm root scripts: `typecheck`, `test`, `db:migrate`, `db:seed`.
+- [x] **P0.4** Remove or gate non-production shortcuts when `APP_ENV=production` (e.g. `x-user-id` impersonation in `apps/api/src/app.ts`).
 
 ### Done when
 
@@ -84,12 +83,12 @@ pnpm test
 
 ### Tasks
 
-- [ ] **P1.1** Seed Better Auth credential rows for demo users (hashed passwords) in `packages/db/src/seed.ts`; document password in README (dev only).
-- [ ] **P1.2** Confirm Better Auth `baseURL` / `basePath` / web `/cm-api` proxy stay aligned (`apps/api/src/auth.ts`, `apps/web/src/app/cm-api/[...path]/route.ts`).
-- [ ] **P1.3** Production cookie posture: `useSecureCookies: true` when HTTPS; trusted origins from env only.
-- [ ] **P1.4** Wire Settings → Export (`GET /account/export`) and Delete (`POST /account/delete`) in `apps/web/src/app/app/settings/page.tsx`.
+- [x] **P1.1** Seed Better Auth credential rows for demo users (hashed passwords) in `packages/db/src/seed.ts`; document password in README (dev only).
+- [x] **P1.2** Confirm Better Auth `baseURL` / `basePath` / web `/cm-api` proxy stay aligned (`apps/api/src/auth.ts`, `apps/web/src/app/cm-api/[...path]/route.ts`).
+- [x] **P1.3** Production cookie posture: `useSecureCookies: true` when HTTPS; trusted origins from env only.
+- [x] **P1.4** Wire Settings → Export (`GET /account/export`) and Delete (`POST /account/delete`) in `apps/web/src/app/app/settings/page.tsx`.
 - [ ] **P1.5** Google OAuth: document redirect URIs; fail gracefully if unset; complete setup prefs after social sign-in (parity with email `setup-complete`).
-- [ ] **P1.6** Replace hardcoded LAN URLs in i18n `auth.serverUnreachable` with generic copy or `WEB_URL`-derived messaging.
+- [x] **P1.6** Replace hardcoded LAN URLs in i18n `auth.serverUnreachable` with generic copy or `WEB_URL`-derived messaging.
 
 ### Done when
 
@@ -114,12 +113,12 @@ pnpm --filter @clear-money/web test
 
 ### Tasks
 
-- [ ] **P2.1** Validate transaction create: `amountMinor > 0`, allowed `type`, currency matches space (or explicit FX policy).
-- [ ] **P2.2** Scope mutations by `spaceId` (PATCH/DELETE/confirm must assert txn belongs to space).
-- [ ] **P2.3** Surface API errors on add/undo (stop swallowing `.catch(() => undefined)` in `apps/web/src/lib/ledger.tsx`).
-- [ ] **P2.4** Decide transfer product: either implement transfer UI + API pair rules, or remove transfer from seed/UI copy until ready.
+- [x] **P2.1** Validate transaction create: `amountMinor > 0`, allowed `type`, currency matches space (or explicit FX policy).
+- [x] **P2.2** Scope mutations by `spaceId` (PATCH/DELETE/confirm must assert txn belongs to space).
+- [x] **P2.3** Surface API errors on add/undo (stop swallowing `.catch(() => undefined)` in `apps/web/src/lib/ledger.tsx`).
+- [x] **P2.4** Decide transfer product: **deferred** — no transfer UI in v1; domain still excludes `transfer` from net; seed may include a transfer row for totals tests only.
 - [ ] **P2.5** Reports: use API `/spaces/:id/reports` or keep client totals but add parity test against domain fixtures.
-- [ ] **P2.6** Fix Reports → Time tab (chart or remove tab until real).
+- [x] **P2.6** Fix Reports → Time tab (chart or remove tab until real).
 - [ ] **P2.7** Settings currency must update user profile / active display path consistently (not only `cm.setup.session`).
 
 ### Done when
@@ -146,7 +145,7 @@ pnpm --filter @clear-money/web e2e
 - [ ] **P3.1** Invite email optional; copy-link accept flow stable; public invite GET does not over-expose PII.
 - [ ] **P3.2** Role change UI for admins/owners (API already has PATCH role — add allowlist validation).
 - [ ] **P3.3** Viewer cannot see create controls (PermissionGate); Child cannot see others’ entries (`filterVisibleEntries`).
-- [ ] **P3.4** Space create validates `type` ∈ personal|project|family|company.
+- [x] **P3.4** Space create validates `type` ∈ personal|project|family|company.
 
 ### Done when
 
@@ -192,15 +191,15 @@ pnpm --filter @clear-money/worker test
 
 ### Tasks
 
-- [ ] **P5.1** Add production Dockerfiles for `apps/api`, `apps/web`, `apps/worker` (multi-stage, non-root where practical).
-- [ ] **P5.2** Extend Compose: `docker-compose.yml` (or `docker-compose.prod.yml`) with `api`, `web`, `worker`, `postgres`, `minio` (or S3), and `nginx` — not only local DB/MinIO.
-- [ ] **P5.3** Add `deploy/nginx/` config: TLS termination; `/` → web; `/cm-api/` → api; WebSocket/SSE if needed; sensible upload size for receipts later.
-- [ ] **P5.4** Document VPS bring-up in `docs/DEPLOY_VPS.md` (clone, env file on server, `docker compose up`, migrate, seed optional).
-- [ ] **P5.5** Env contract: `WEB_URL` / `BETTER_AUTH_URL` = public `https://domain`; API internal URL for web container; secrets only on the VPS (never in git).
+- [x] **P5.1** Add production Dockerfiles for `apps/api`, `apps/web`, `apps/worker` (multi-stage, non-root where practical).
+- [x] **P5.2** Extend Compose: `docker-compose.yml` (or `docker-compose.prod.yml`) with `api`, `web`, `worker`, `postgres`, `minio` (or S3), and `nginx` — not only local DB/MinIO.
+- [x] **P5.3** Add `deploy/nginx/` config: TLS termination; `/` → web; `/cm-api/` → api; WebSocket/SSE if needed; sensible upload size for receipts later.
+- [x] **P5.4** Document VPS bring-up in `docs/DEPLOY_VPS.md` (clone, env file on server, `docker compose up`, migrate, seed optional).
+- [x] **P5.5** Env contract: `WEB_URL` / `BETTER_AUTH_URL` = public `https://domain`; API internal URL for web container; secrets only on the VPS (never in git).
 - [ ] **P5.6** TLS everywhere; `APP_ENV=production`; strong `BETTER_AUTH_SECRET`; secure cookies on; CORS / trustedOrigins = production origin (+ mobile scheme if required).
-- [ ] **P5.7** Rate limits, health checks (`/health`), basic logging.
-- [ ] **P5.8** Host `/privacy` and `/terms` on the web app (stores + finance).
-- [ ] **P5.9** Billing: keep `BETA_FREE_MODE` for beta **or** complete Stripe live checklist — do not half-enable checkout.
+- [x] **P5.7** Rate limits, health checks (`/health`), basic logging.
+- [x] **P5.8** Host `/privacy` and `/terms` on the web app (stores + finance).
+- [x] **P5.9** Billing: keep `BETA_FREE_MODE` for beta **or** complete Stripe live checklist — do not half-enable checkout.
 
 ### Done when
 
@@ -226,21 +225,21 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://$DOMAIN/
 
 ### Tasks
 
-- [ ] **P6.1** Wire email sign-in/up to API with session in `expo-secure-store` (stop fake `router.replace` on auth screens).
-- [ ] **P6.2** Release builds set `EXPO_PUBLIC_API_URL` (or EAS env) to `https://<domain>/cm-api` or the public API origin — **never** `localhost` / LAN IPs in release profiles.
-- [ ] **P6.3** Fix sync path to `POST /spaces/:spaceId/transactions` with idempotency; share one store between Add and Activity.
-- [ ] **P6.4** Home totals from persisted/synced transactions.
+- [x] **P6.1** Wire email sign-in/up to API with session in `expo-secure-store` (stop fake `router.replace` on auth screens).
+- [x] **P6.2** Release builds set `EXPO_PUBLIC_API_URL` (or EAS env) to `https://<domain>/cm-api` or the public API origin — **never** `localhost` / LAN IPs in release profiles.
+- [x] **P6.3** Fix sync path to `POST /spaces/:spaceId/transactions` with idempotency; share one store between Add and Activity.
+- [x] **P6.4** Home totals from persisted/synced transactions.
 - [ ] **P6.5** Offline queue: enqueue when offline; `reconcile` on reconnect without duplicates (use existing `src/offline` tests as contract).
 - [ ] **P6.6** Replace placeholder icons/splash with real assets (512+).
-- [ ] **P6.7** Add `eas.json` with profiles:
+- [x] **P6.7** Add `eas.json` with profiles:
   - `preview` / `apk` → Android **APK** for sideload / internal testers
   - `production` → Android **AAB** (when Play upload is needed)
   - `ios` → iOS build (simulator and/or device / TestFlight)
 - [ ] **P6.8** Produce Android APK via EAS (or local) and install on a physical device; confirm it talks to the VPS API.
 - [ ] **P6.9** Produce iOS build via EAS; run on simulator or TestFlight device against the same API URL. (Apple Developer account required for device/TestFlight.)
-- [ ] **P6.10** Document install + API URL in `apps/mobile/README.md` (how to rebuild when domain changes).
-- [ ] **P6.11** Remove README claims for camera/biometrics until implemented; trim unused permissions.
-- [ ] **P6.12** v1 monetization: **free only** on mobile (no Stripe IAP evasion). Play/App Store Billing only in Phase 8 if needed.
+- [x] **P6.10** Document install + API URL in `apps/mobile/README.md` (how to rebuild when domain changes).
+- [x] **P6.11** Remove README claims for camera/biometrics until implemented; trim unused permissions.
+- [x] **P6.12** v1 monetization: **free only** on mobile (no Stripe IAP evasion). Play/App Store Billing only in Phase 8 if needed.
 
 ### Done when
 
@@ -320,7 +319,7 @@ Human-required inputs (agents must not invent):
 
 | ID | Blocker | Owner |
 | --- | --- | --- |
-| B1 | VPS + domain not chosen | Human |
+| B1 | VPS + domain not chosen — blocks live TLS (P5.6) | Human |
 | B2 | EAS account; Apple Developer (for iOS device builds) | Human |
 | B3 | Privacy/terms legal copy | Human |
 | B4 | Whether v1 mobile is free-only | Human (recommend: yes) |

@@ -65,7 +65,11 @@ export function getAuth(): AuthApi {
       },
     },
     advanced: {
-      useSecureCookies: false,
+      // Secure cookies whenever we are in production or serving over HTTPS.
+      useSecureCookies:
+        config.appEnv === 'production' ||
+        config.webUrl.startsWith('https://') ||
+        publicOrigin().startsWith('https://'),
       database: {
         generateId: () => createId('user'),
       },

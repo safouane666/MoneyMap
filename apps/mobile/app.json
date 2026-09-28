@@ -46,7 +46,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "clear-money-local"
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
       }
     }
   }

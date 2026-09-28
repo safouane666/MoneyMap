@@ -28,7 +28,15 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
       </header>
       {children}
       <footer className="border-t border-border py-8 text-center text-sm text-ink-muted">
-        © {new Date().getFullYear()} Clear Money
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/privacy" className="hover:text-ink">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-ink">
+            Terms
+          </Link>
+        </div>
+        <p className="mt-3">© {new Date().getFullYear()} Clear Money</p>
       </footer>
     </div>
   );

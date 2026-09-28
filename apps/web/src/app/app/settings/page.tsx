@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [currencyBusy, setCurrencyBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [privacyBusy, setPrivacyBusy] = useState(false);
   const [sub, setSub] = useState<SubState | null>(null);
   const [subBusy, setSubBusy] = useState(false);
   const [subMessage, setSubMessage] = useState<string | null>(null);
@@ -108,6 +109,63 @@ export default function SettingsPage() {
       setSubMessage(err instanceof ApiError ? err.message : 'Billing action failed');
     } finally {
       setSubBusy(false);
+    }
+  };
+
+  const exportAccountData = async () => {
+    setPrivacyBusy(true);
+    try {
+      const result = await apiFetch<{
+        profile: unknown;
+        memberships: unknown;
+        exportedAt: string;
+      }>('/account/export');
+      if (result.offline) {
+        showToast({ message: t('billing.apiOffline') });
+        return;
+      }
+      const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clear-money-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast({ message: t('settings.exportDone') });
+    } catch (err) {
+      showToast({
+        message: err instanceof ApiError ? err.message : t('settings.exportFailed'),
+      });
+    } finally {
+      setPrivacyBusy(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setPrivacyBusy(true);
+    try {
+      const result = await apiFetch<{ ok: boolean }>('/account/delete', {
+        method: 'POST',
+        body: '{}',
+      });
+      if (result.offline) {
+        showToast({ message: t('billing.apiOffline') });
+        return;
+      }
+      try {
+        await apiFetch('/auth/sign-out', { method: 'POST', body: '{}' });
+      } catch {
+        /* session may already be invalid */
+      }
+      clearLocalSessionCaches();
+      window.location.href = '/auth/sign-in';
+    } catch (err) {
+      showToast({
+        message: err instanceof ApiError ? err.message : t('settings.deleteFailed'),
+      });
+      setPrivacyBusy(false);
     }
   };
 
@@ -285,8 +343,18 @@ export default function SettingsPage() {
           <CardTitle className="text-base">{t('settings.privacy')}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button variant="secondary">{t('settings.exportData')}</Button>
-          <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
+          <Button
+            variant="secondary"
+            disabled={privacyBusy}
+            onClick={() => void exportAccountData()}
+          >
+            {t('settings.exportData')}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={privacyBusy}
+            onClick={() => setConfirmDelete(true)}
+          >
             {t('settings.deleteAccount')}
           </Button>
         </CardContent>
@@ -296,10 +364,20 @@ export default function SettingsPage() {
         <Alert variant="destructive">
           <AlertDescription className="flex flex-wrap items-center gap-3">
             This permanently deletes your account. Shared Space records stay for other members.
-            <Button size="sm" variant="destructive" onClick={() => setConfirmDelete(false)}>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={privacyBusy}
+              onClick={() => void deleteAccount()}
+            >
               Confirm delete
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => setConfirmDelete(false)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={privacyBusy}
+              onClick={() => setConfirmDelete(false)}
+            >
               Cancel
             </Button>
           </AlertDescription>

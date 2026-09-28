@@ -4,15 +4,10 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { createIdempotencyKey } from '@clear-money/domain';
 import { Body, PrimaryButton, Title } from '../src/components/ui';
+import { getPersonalSpaceId } from '../src/lib/session';
+import { loadSetupSession } from '../src/lib/setup-session';
+import { offlineQueue } from '../src/offline/client';
 import { colors, radius, space } from '../src/theme/tokens';
-import { OfflineQueue } from '../src/offline/queue';
-import { createSqliteStoreStub } from '../src/offline/store';
-
-const queue = new OfflineQueue(createSqliteStoreStub(), {
-  async upsertTransaction() {
-    return { ok: false as const, error: 'offline' };
-  },
-});
 
 export default function AddTransactionModal() {
   const router = useRouter();
@@ -22,6 +17,8 @@ export default function AddTransactionModal() {
   const [categories, setCategories] = useState(['Food', 'Transport', 'Rent', 'Salary', 'Freelance']);
   const [newCat, setNewCat] = useState('');
   const [addingCat, setAddingCat] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas, padding: space[6] }}>
@@ -136,20 +133,48 @@ export default function AddTransactionModal() {
           </Pressable>
         </View>
       ) : null}
+      {error ? (
+        <Text style={{ color: colors.expense, marginBottom: space[3] }}>{error}</Text>
+      ) : null}
       <PrimaryButton
-        label={type === 'expense' ? 'Save expense' : 'Save income'}
-        onPress={async () => {
-          const major = Number(amount || '0');
-          const amountMinor = Math.round(major * 100);
-          await queue.enqueueLocal({
-            spaceId: 'space_local',
-            type,
-            amountMinor,
-            currency: 'USD',
-            description: category,
-            idempotencyKey: createIdempotencyKey(),
-          });
-          router.back();
+        label={
+          saving
+            ? 'Saving…'
+            : type === 'expense'
+              ? 'Save expense'
+              : 'Save income'
+        }
+        onPress={() => {
+          void (async () => {
+            if (saving) return;
+            setSaving(true);
+            setError(null);
+            try {
+              const major = Number(amount || '0');
+              if (!Number.isFinite(major) || major <= 0) {
+                setError('Enter an amount greater than zero');
+                return;
+              }
+              const amountMinor = Math.round(major * 100);
+              const setup = await loadSetupSession();
+              const spaceId = (await getPersonalSpaceId()) ?? 'space_local';
+              await offlineQueue.enqueueLocal({
+                spaceId,
+                type,
+                amountMinor,
+                currency: setup.currency || 'USD',
+                description: category,
+                idempotencyKey: createIdempotencyKey(),
+              });
+              // Best-effort sync; offline queue keeps pending_sync on failure.
+              await offlineQueue.reconcile();
+              router.back();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Could not save');
+            } finally {
+              setSaving(false);
+            }
+          })();
         }}
       />
     </SafeAreaView>

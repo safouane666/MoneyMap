@@ -32,7 +32,8 @@ export const config = {
   port: Number(env('PORT', env('API_PORT', '3001'))),
   webUrl: env('WEB_URL', 'http://localhost:8259'),
   authSecret: env('BETTER_AUTH_SECRET', 'dev-secret-change-me-to-32-chars-min'),
-  authUrl: env('BETTER_AUTH_URL', 'http://localhost:3011'),
+  // Cookie/host origin for Better Auth (web origin when using /cm-api proxy — not the API port).
+  authUrl: env('BETTER_AUTH_URL', env('WEB_URL', 'http://localhost:8259')),
   databaseUrl:
     env('DATABASE_URL') || 'postgresql://clearmoney:clearmoney@localhost:5433/clearmoney',
   googleClientId: env('GOOGLE_CLIENT_ID'),

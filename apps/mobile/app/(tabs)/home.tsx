@@ -1,32 +1,63 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { computePeriodTotals, formatMinorUnits, type LedgerTransaction } from '@clear-money/domain';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  computePeriodTotals,
+  formatMinorUnits,
+  type LedgerTransaction,
+} from '@clear-money/domain';
 import { t } from '@clear-money/i18n';
 import { Body, Title } from '../../src/components/ui';
 import { loadSetupSession } from '../../src/lib/setup-session';
+import { offlineQueue, offlineStore } from '../../src/offline/client';
 import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function HomeScreen() {
   const [locale, setLocale] = useState('en');
   const [currency, setCurrency] = useState('USD');
+  const [ledger, setLedger] = useState<LedgerTransaction[]>([]);
 
-  useEffect(() => {
-    void loadSetupSession().then((s) => {
-      setLocale(s.locale);
-      setCurrency(s.currency);
-    });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        const setup = await loadSetupSession();
+        setLocale(setup.locale);
+        setCurrency(setup.currency);
+        // Best-effort sync so returning to Home picks up server confirms.
+        await offlineQueue.reconcile().catch(() => undefined);
+        const rows = await offlineStore.list();
+        setLedger(
+          rows
+            .filter((row) => row.status === 'confirmed' || row.status === 'pending_sync')
+            .map((row) => ({
+              id: row.id,
+              spaceId: row.spaceId,
+              type: row.type,
+              amountMinor: row.amountMinor,
+              currency: row.currency,
+              categoryId: row.categoryId,
+              description: row.description,
+              occurredAt: row.occurredAt,
+              createdAt: row.createdAt,
+              createdBy: 'local',
+              source: 'manual' as const,
+              // Include pending_sync in period totals for immediate local feedback.
+              status: 'confirmed' as const,
+            })),
+        );
+      })();
+    }, []),
+  );
 
-  const sample: LedgerTransaction[] = [];
-  const totals = computePeriodTotals(sample, currency);
+  const totals = computePeriodTotals(ledger, currency);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.brand}>{t(locale, 'brand.name')}</Text>
         <Title>{t(locale, 'home.title')}</Title>
-        <Body>{t(locale, 'home.empty')}</Body>
+        {ledger.length === 0 ? <Body>{t(locale, 'home.empty')}</Body> : null}
 
         <View style={styles.row}>
           <SummaryCard

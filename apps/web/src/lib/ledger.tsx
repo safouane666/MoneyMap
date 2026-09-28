@@ -18,6 +18,7 @@ import {
 } from '@clear-money/domain';
 import { apiFetch, ApiError } from '@/lib/api';
 import { loadSetupSession } from '@/lib/setup-session';
+import { useToast } from '@/components/Toast';
 import {
   addDemoCategory,
   addDemoTransaction,
@@ -363,6 +364,7 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
 }
 
 export function LedgerProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
   const [state, setState] = useState<DemoState>(EMPTY);
   const [offline, setOffline] = useState(true);
   const [ready, setReady] = useState(false);
@@ -663,14 +665,22 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
               ...current.transactions.filter((t) => t.id !== optimistic.id && t.id !== saved.id),
             ],
           });
-        } catch {
-          // Keep optimistic row; user can refresh
+        } catch (error) {
+          commit({
+            ...stateRef.current,
+            transactions: stateRef.current.transactions.filter((t) => t.id !== optimistic.id),
+          });
+          const message =
+            error instanceof ApiError
+              ? error.message
+              : 'Could not save transaction. Check your connection and try again.';
+          showToast({ message });
         }
       })();
 
       return optimistic;
     },
-    [applyDemo, commit, noteUnsignedWrite],
+    [applyDemo, commit, noteUnsignedWrite, showToast],
   );
 
   const updateTransaction = useCallback(
@@ -697,9 +707,16 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       void apiFetch(`/spaces/${existing.spaceId}/transactions/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(patch),
-      }).catch(() => undefined);
+      }).catch((error) => {
+        showToast({
+          message:
+            error instanceof ApiError
+              ? error.message
+              : 'Could not update transaction.',
+        });
+      });
     },
-    [commit],
+    [commit, showToast],
   );
 
   const undoTransaction = useCallback(
@@ -719,9 +736,20 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       if (!existing) return;
       void apiFetch(`/spaces/${existing.spaceId}/transactions/${id}`, {
         method: 'DELETE',
-      }).catch(() => undefined);
+      }).catch((error) => {
+        commit({
+          ...stateRef.current,
+          transactions: [existing, ...stateRef.current.transactions],
+        });
+        showToast({
+          message:
+            error instanceof ApiError
+              ? error.message
+              : 'Could not undo transaction. It was restored locally.',
+        });
+      });
     },
-    [commit],
+    [commit, showToast],
   );
 
   const restoreTransaction = useCallback(

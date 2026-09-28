@@ -9,9 +9,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
       <I18nProvider>
-        <LedgerProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </LedgerProvider>
+        <ToastProvider>
+          <LedgerProvider>{children}</LedgerProvider>
+        </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
   );

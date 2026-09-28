@@ -1,0 +1,5 @@
+# Place TLS material here on the VPS (not committed):
+#   fullchain.pem
+#   privkey.pem
+#
+# Local HTTP smoke tests do not need files in this directory.

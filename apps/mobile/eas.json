@@ -1,0 +1,37 @@
+{
+  "_comment": "Replace YOUR_DOMAIN below and eas.projectId in app.json after linking an EAS project (eas init).",
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "apk": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+      }
+    },
+    "ios": {
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

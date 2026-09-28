@@ -31,6 +31,18 @@ pnpm --filter @clear-money/mobile start
 
 Billing defaults to `BILLING_MODE=disabled` and `BETA_FREE_MODE=true` (no payment UI).
 
+## Demo accounts (DEV ONLY)
+
+After `pnpm db:seed`, sign in on the web app with any of:
+
+| Email | Password |
+| --- | --- |
+| `demo@clearmoney.app` | `Demo123!` |
+| `child@clearmoney.app` | `Demo123!` |
+| `member@clearmoney.app` | `Demo123!` |
+
+These passwords exist only for local demos. Do **not** use them in production.
+
 ## Design
 
 See [docs/DESIGN.md](docs/DESIGN.md). Acceptance matrix: [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md).

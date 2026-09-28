@@ -2,10 +2,12 @@ import { config as loadEnv } from 'dotenv';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createId } from '@clear-money/domain';
-import { eq } from 'drizzle-orm';
+import { hashPassword } from 'better-auth/crypto';
+import { and, eq } from 'drizzle-orm';
 import { createDb } from './client.js';
 import {
   user,
+  account,
   spaces,
   memberships,
   categories,
@@ -18,54 +20,103 @@ const here = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: resolve(here, '../../../.env') });
 loadEnv();
 
+/** DEV ONLY — documented in README. Never use in production. */
+const DEMO_PASSWORD = 'Demo123!';
+
+const DEMO_USERS = [
+  {
+    id: 'user_demo_owner_clear_money_01',
+    accountId: 'acc_demo_owner_credential_01',
+    name: 'Demo Owner',
+    email: 'demo@clearmoney.app',
+    locale: 'en',
+    defaultCurrency: 'USD',
+    timezone: 'America/New_York',
+    plan: 'shared',
+  },
+  {
+    id: 'user_demo_child_clear_money_01',
+    accountId: 'acc_demo_child_credential_01',
+    name: 'Demo Child',
+    email: 'child@clearmoney.app',
+    locale: 'en',
+    defaultCurrency: 'USD',
+    timezone: 'America/New_York',
+    plan: 'free',
+  },
+  {
+    id: 'user_demo_member_clear_money01',
+    accountId: 'acc_demo_member_credential01',
+    name: 'Demo Member',
+    email: 'member@clearmoney.app',
+    locale: 'fr',
+    defaultCurrency: 'EUR',
+    timezone: 'Europe/Paris',
+    plan: 'plus',
+  },
+] as const;
+
+async function ensureCredentialAccounts(
+  db: ReturnType<typeof createDb>,
+  passwordHash: string,
+) {
+  for (const demo of DEMO_USERS) {
+    const existing = await db
+      .select({ id: account.id })
+      .from(account)
+      .where(
+        and(eq(account.userId, demo.id), eq(account.providerId, 'credential')),
+      )
+      .limit(1);
+
+    if (existing[0]) {
+      await db
+        .update(account)
+        .set({ password: passwordHash, updatedAt: new Date() })
+        .where(eq(account.id, existing[0].id));
+      continue;
+    }
+
+    await db.insert(account).values({
+      id: demo.accountId,
+      accountId: demo.id,
+      providerId: 'credential',
+      userId: demo.id,
+      password: passwordHash,
+    });
+  }
+}
+
 async function main() {
   const db = createDb();
+  const passwordHash = await hashPassword(DEMO_PASSWORD);
 
-  const demoUserId = 'user_demo_owner_clear_money_01';
-  const childId = 'user_demo_child_clear_money_01';
-  const memberId = 'user_demo_member_clear_money01';
+  const demoUserId = DEMO_USERS[0].id;
+  const childId = DEMO_USERS[1].id;
+  const memberId = DEMO_USERS[2].id;
 
   const existing = await db.select().from(user).where(eq(user.id, demoUserId)).limit(1);
   if (existing.length) {
-    console.log('Seed already applied');
+    await ensureCredentialAccounts(db, passwordHash);
+    console.log('Seed already applied (credential passwords refreshed)');
     return;
   }
 
-  await db.insert(user).values([
-    {
-      id: demoUserId,
-      name: 'Demo Owner',
-      email: 'demo@clearmoney.app',
+  await db.insert(user).values(
+    DEMO_USERS.map((demo) => ({
+      id: demo.id,
+      name: demo.name,
+      email: demo.email,
       emailVerified: true,
-      locale: 'en',
-      defaultCurrency: 'USD',
-      timezone: 'America/New_York',
-      plan: 'shared',
+      locale: demo.locale,
+      defaultCurrency: demo.defaultCurrency,
+      timezone: demo.timezone,
+      plan: demo.plan,
       setupCompletedAt: new Date(),
-    },
-    {
-      id: childId,
-      name: 'Demo Child',
-      email: 'child@clearmoney.app',
-      emailVerified: true,
-      locale: 'en',
-      defaultCurrency: 'USD',
-      timezone: 'America/New_York',
-      plan: 'free',
-      setupCompletedAt: new Date(),
-    },
-    {
-      id: memberId,
-      name: 'Demo Member',
-      email: 'member@clearmoney.app',
-      emailVerified: true,
-      locale: 'fr',
-      defaultCurrency: 'EUR',
-      timezone: 'Europe/Paris',
-      plan: 'plus',
-      setupCompletedAt: new Date(),
-    },
-  ]);
+    })),
+  );
+
+  await ensureCredentialAccounts(db, passwordHash);
 
   const personalId = 'space_demo_personal_clear_m01';
   const projectId = 'space_demo_project_clear_mo01';
@@ -216,6 +267,7 @@ async function main() {
   ]);
 
   console.log('Seed complete: Personal, Project, Family, Company spaces');
+  console.log(`Demo login (DEV ONLY): demo@clearmoney.app / ${DEMO_PASSWORD}`);
 }
 
 main()
