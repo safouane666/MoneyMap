@@ -5,7 +5,11 @@ alwaysApply: true
 
 # Production execution
 
-When the user asks to continue production, Play Store, launch, or “next phase” work, follow **`docs/PRODUCTION_PLAN.md`**.
+When the user asks to continue production, VPS, Play Store, APK, iOS, launch, or “next phase” work, follow **`docs/PRODUCTION_PLAN.md`**.
+
+## Final objective
+
+Monorepo ships: **API + worker + Compose + Nginx on a VPS**, **web** behind Nginx, **Android APK** and **iOS build** pointing at the same HTTPS API. Store listings are Phase 8 (optional).
 
 ## Rules
 
@@ -13,15 +17,17 @@ When the user asks to continue production, Play Store, launch, or “next phase�
 2. Prefer tasks marked `[ ]` in order (P0 → P1 → …). Check boxes to `[x]` when done.
 3. Keep the product light: no features outside the plan unless required for a Done criterion.
 4. Never commit `.env` or secrets. Never invent production credentials — record blockers in the plan’s **Open blockers** table.
-5. Match existing monorepo patterns (`apps/*`, `packages/*`). Run the Verify commands listed for the phase.
+5. Match existing monorepo patterns (`apps/*`, `packages/*`, `deploy/`). Run the Verify commands listed for the phase.
 6. Mobile v1 is **auth + personal space + add/list/sync** only. Full web parity is Phase 8 (optional).
-7. Android v1 is **free-only** unless the human explicitly prioritizes Play Billing.
+7. Android/iOS v1 is **free-only** unless the human explicitly prioritizes store billing.
+8. Release mobile builds must use the VPS HTTPS API URL — never localhost/LAN.
 
 ## Quick pointers
 
-- Acceptance matrix: `docs/ACCEPTANCE.md`
+- Plan: `docs/PRODUCTION_PLAN.md`
+- Acceptance: `docs/ACCEPTANCE.md`
 - Design: `docs/DESIGN.md`
-- Seed / demo users: `packages/db/src/seed.ts`
-- Web API client + proxy: `apps/web/src/lib/api.ts`, `apps/web/src/app/cm-api/`
+- Local compose today: `docker-compose.yml` (Postgres + MinIO only — prod stack is Phase 5)
 - Auth: `apps/api/src/auth.ts`
-- Mobile (prototype): `apps/mobile/`
+- Web proxy: `apps/web/src/app/cm-api/`
+- Mobile: `apps/mobile/`

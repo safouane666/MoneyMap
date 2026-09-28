@@ -1,6 +1,31 @@
 # Clear Money — Production Execution Plan
 
-Agent-ready plan to take Clear Money from demo prototype to production (web + Android Play Closed Testing). Work **one phase at a time**. Do not start a later phase until the current phase’s Done criteria pass.
+Agent-ready plan to take Clear Money from demo prototype to the **final monorepo + VPS + mobile** ship shape. Work **one phase at a time**. Do not start a later phase until the current phase’s Done criteria pass.
+
+## Final objective (north star)
+
+One monorepo that contains everything needed to run and ship:
+
+| Piece | Lives in monorepo | Runs / ships as |
+| --- | --- | --- |
+| API (+ worker) | `apps/api`, `apps/worker` | Docker services on the VPS |
+| Postgres + object storage | `docker-compose` (prod overlay) | Docker on the VPS |
+| Nginx (TLS reverse proxy) | `deploy/nginx/` (to add) | Front door on the VPS (`https://…` → web + `/cm-api` → API) |
+| Browser frontend | `apps/web` | Docker/Next on the VPS behind Nginx |
+| Android app | `apps/mobile` | **APK** (and later AAB) built with EAS, `EXPO_PUBLIC_API_URL` → production HTTPS API |
+| iOS app | `apps/mobile` | **IPA / simulator / TestFlight build** with the **same** production API URL |
+
+```
+Internet → Nginx (443)
+            ├─ /           → web (Next)
+            └─ /cm-api/*   → api (Hono)
+                              ├─ Postgres
+                              ├─ Worker
+                              └─ MinIO/S3
+Mobile APK / iOS build ──HTTPS──→ same API origin (or same host /cm-api)
+```
+
+**Not in the repo today:** production Compose stack for api/web/worker/nginx (only local Postgres+MinIO), no Nginx configs, no EAS profiles, mobile still points at localhost and fakes auth.
 
 ## How agents must work
 
@@ -17,8 +42,8 @@ Agent-ready plan to take Clear Money from demo prototype to production (web + An
 | --- | --- |
 | Domain / DB / API / Worker | Substantial; some stubs and weak validation |
 | Web (`apps/web`) | Demo-capable after fresh sign-up; gaps in settings privacy, seed login, some UI stubs |
-| Mobile (`apps/mobile`) | Expo Go prototype; fake auth; no EAS/Play pipeline |
-| Hosting | Local / LAN / Tailscale only — not production HTTPS |
+| Mobile (`apps/mobile`) | Expo Go prototype; fake auth; no EAS / APK / iOS pipeline |
+| VPS stack | Local compose = Postgres + MinIO only; **no Nginx**, api/web not containerized for VPS |
 
 Known open demo gaps (fix early if touching those areas):
 
@@ -161,74 +186,90 @@ pnpm --filter @clear-money/worker test
 
 ---
 
-## Phase 5 — Production web hosting
+## Phase 5 — VPS stack in the monorepo (Compose + Nginx)
 
-**Goal:** Public HTTPS web app + API suitable for real users (and mobile later).
+**Goal:** The monorepo ships a VPS-ready stack: API, worker, web, Postgres, storage, and Nginx with TLS. Browser users hit the same host the mobile apps will use.
 
 ### Tasks
 
-- [ ] **P5.1** Deploy Postgres, API, web, worker, object storage with secrets from a vault (not `.env` in git).
-- [ ] **P5.2** TLS everywhere; `APP_ENV=production`; strong `BETTER_AUTH_SECRET`; secure cookies on.
-- [ ] **P5.3** CORS / trustedOrigins = production web origin only (+ intentional extras).
-- [ ] **P5.4** Rate limits confirmed on auth, invites, AI, OCR, export.
-- [ ] **P5.5** Health checks, basic logging, uptime alert.
-- [ ] **P5.6** Host `/privacy` and `/terms` pages (required for stores and finance apps).
-- [ ] **P5.7** Billing: keep `BETA_FREE_MODE` for beta **or** complete Stripe live checklist in `docs/ACCEPTANCE.md` — do not half-enable checkout.
+- [ ] **P5.1** Add production Dockerfiles for `apps/api`, `apps/web`, `apps/worker` (multi-stage, non-root where practical).
+- [ ] **P5.2** Extend Compose: `docker-compose.yml` (or `docker-compose.prod.yml`) with `api`, `web`, `worker`, `postgres`, `minio` (or S3), and `nginx` — not only local DB/MinIO.
+- [ ] **P5.3** Add `deploy/nginx/` config: TLS termination; `/` → web; `/cm-api/` → api; WebSocket/SSE if needed; sensible upload size for receipts later.
+- [ ] **P5.4** Document VPS bring-up in `docs/DEPLOY_VPS.md` (clone, env file on server, `docker compose up`, migrate, seed optional).
+- [ ] **P5.5** Env contract: `WEB_URL` / `BETTER_AUTH_URL` = public `https://domain`; API internal URL for web container; secrets only on the VPS (never in git).
+- [ ] **P5.6** TLS everywhere; `APP_ENV=production`; strong `BETTER_AUTH_SECRET`; secure cookies on; CORS / trustedOrigins = production origin (+ mobile scheme if required).
+- [ ] **P5.7** Rate limits, health checks (`/health`), basic logging.
+- [ ] **P5.8** Host `/privacy` and `/terms` on the web app (stores + finance).
+- [ ] **P5.9** Billing: keep `BETA_FREE_MODE` for beta **or** complete Stripe live checklist — do not half-enable checkout.
 
 ### Done when
 
-- Fresh device can open production URL, sign up, add expense, sign out, sign in.
-- Privacy/terms URLs load without auth.
+- On a VPS (or equivalent), `docker compose` brings up Nginx + web + api + worker + db; HTTPS works.
+- Browser: sign up → add expense → sign out → sign in on the public URL.
+- Mobile can use the **same** public API base URL (Phase 6).
+- Privacy/terms load without auth.
 
 ### Verify
 
-- Manual production smoke checklist (document results in PR).
+```bash
+# On VPS or local prod-compose profile:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+curl -fsS https://$DOMAIN/health   # or via nginx path if health is only on api
+curl -fsS -o /dev/null -w "%{http_code}\n" https://$DOMAIN/
+```
 
 ---
 
-## Phase 6 — Mobile MVP (Play Closed Testing)
+## Phase 6 — Mobile builds pointing at the VPS (Android APK + iOS)
 
-**Goal:** Real Android app: auth → space → add → list → sync. Not full web parity.
+**Goal:** Real mobile apps (not Expo Go): auth → personal space → add → list → sync against the **production HTTPS API** from Phase 5. Ship an **Android APK** and an **iOS build** configured with that server URL. Store listing (Play/App Store) can follow; binary + server wiring is the MVP.
 
 ### Tasks
 
 - [ ] **P6.1** Wire email sign-in/up to API with session in `expo-secure-store` (stop fake `router.replace` on auth screens).
-- [ ] **P6.2** Set `EXPO_PUBLIC_API_URL` to production HTTPS API (never ship `localhost` defaults in release builds).
+- [ ] **P6.2** Release builds set `EXPO_PUBLIC_API_URL` (or EAS env) to `https://<domain>/cm-api` or the public API origin — **never** `localhost` / LAN IPs in release profiles.
 - [ ] **P6.3** Fix sync path to `POST /spaces/:spaceId/transactions` with idempotency; share one store between Add and Activity.
 - [ ] **P6.4** Home totals from persisted/synced transactions.
 - [ ] **P6.5** Offline queue: enqueue when offline; `reconcile` on reconnect without duplicates (use existing `src/offline` tests as contract).
-- [ ] **P6.6** Replace placeholder icons/splash with store-grade assets (512+).
-- [ ] **P6.7** Add `eas.json`, real EAS projectId, Android package `app.clearmoney.mobile`, `versionCode` strategy.
-- [ ] **P6.8** Build AAB via EAS; upload to Play Closed Testing.
-- [ ] **P6.9** Play Console: Data safety, content rating, privacy policy URL, screenshots, short/full description.
-- [ ] **P6.10** Remove README claims for camera/biometrics until implemented; trim unused permissions.
-- [ ] **P6.11** v1 monetization: **free only** on Android (no Stripe IAP evasion). Play Billing only in a later phase if needed.
+- [ ] **P6.6** Replace placeholder icons/splash with real assets (512+).
+- [ ] **P6.7** Add `eas.json` with profiles:
+  - `preview` / `apk` → Android **APK** for sideload / internal testers
+  - `production` → Android **AAB** (when Play upload is needed)
+  - `ios` → iOS build (simulator and/or device / TestFlight)
+- [ ] **P6.8** Produce Android APK via EAS (or local) and install on a physical device; confirm it talks to the VPS API.
+- [ ] **P6.9** Produce iOS build via EAS; run on simulator or TestFlight device against the same API URL. (Apple Developer account required for device/TestFlight.)
+- [ ] **P6.10** Document install + API URL in `apps/mobile/README.md` (how to rebuild when domain changes).
+- [ ] **P6.11** Remove README claims for camera/biometrics until implemented; trim unused permissions.
+- [ ] **P6.12** v1 monetization: **free only** on mobile (no Stripe IAP evasion). Play/App Store Billing only in Phase 8 if needed.
 
 ### Done when
 
-- Closed testers install AAB, sign in against production API, add an expense, see it after kill/relaunch, and after airplane-mode → reconnect without duplicate.
-- Play listing has privacy policy URL and Data safety filled.
+- Android APK installed on a phone: sign in → add expense → see it after kill/relaunch → offline then reconnect without duplicate — all against the VPS.
+- iOS build does the same against the same API URL (simulator acceptable if device certs are blocked; device/TestFlight preferred).
+- No release binary embeds `localhost` or Tailscale demo hosts.
 
 ### Verify
 
 ```bash
 pnpm --filter @clear-money/mobile test
 pnpm --filter @clear-money/mobile typecheck
-# EAS: eas build --platform android --profile preview|production
+# EAS examples:
+# eas build --platform android --profile apk
+# eas build --platform ios --profile ios
 ```
 
 ---
 
 ## Phase 7 — Hardening & observability
 
-**Goal:** Production weaknesses closed.
+**Goal:** Production weaknesses closed on the VPS + clients.
 
 ### Tasks
 
 - [ ] **P7.1** Crash reporting (Sentry or equivalent) on web + mobile.
 - [ ] **P7.2** Structured API error codes; no raw provider strings in user-facing UI.
-- [ ] **P7.3** Backup/restore runbook for Postgres; migration discipline.
-- [ ] **P7.4** Security pass: webhook signature verification if Stripe live; invite PII; disable stub billing webhook in production.
+- [ ] **P7.3** Backup/restore runbook for Postgres on the VPS; migration discipline.
+- [ ] **P7.4** Security pass: webhook signature verification if Stripe live; invite PII; disable stub billing webhook in production; Nginx hardening (headers, rate limit at edge optional).
 - [ ] **P7.5** Update `docs/ACCEPTANCE.md` so claimed test paths exist; add missing API integration tests under `apps/api/src/__tests__` or stop claiming them.
 
 ### Done when
@@ -238,13 +279,14 @@ pnpm --filter @clear-money/mobile typecheck
 
 ---
 
-## Phase 8 — Optional later (explicitly out of MVP)
+## Phase 8 — Optional later (stores & parity)
 
 Do **not** start these until Phases 0–7 Done criteria pass unless product prioritizes them:
 
+- Google Play Console listing + AAB Closed/Open testing (APK already exists from Phase 6).
+- Apple App Store / TestFlight public distribution (beyond internal build).
 - Full mobile parity: goals, AI chat, OCR, invites, spaces management, reports charts.
-- Google Play Billing for Plus.
-- iOS App Store.
+- Google Play Billing / App Store IAP for Plus.
 - Transfer dual-entry, scheduled expenses, approvals.
 - Advanced AI features requiring always-on worker + keys.
 
@@ -256,14 +298,17 @@ Do **not** start these until Phases 0–7 Done criteria pass unless product prio
 | --- | --- | --- |
 | Wave A | Phase 0 → 1 → 2 | Sequential (auth before money loop) |
 | Wave B | Phase 3 + 4 | Parallel after Phase 2 |
-| Wave C | Phase 5 | Needs ops/secrets from human |
-| Wave D | Phase 6 | After Phase 5 API URL exists |
-| Wave E | Phase 7 | After first production deploy |
+| Wave C | Phase 5 (Compose + Nginx + VPS) | Needs domain/DNS/secrets from human |
+| Wave D | Phase 6 (APK + iOS → same API) | After Phase 5 public HTTPS URL exists |
+| Wave E | Phase 7 | After first VPS deploy |
 
 Human-required inputs (agents must not invent):
 
-- Production domain + TLS certs / hosting account
-- EAS / Expo account + Play Console account
+- VPS + domain + DNS pointing at the server
+- TLS (Let’s Encrypt or provided certs)
+- EAS / Expo account
+- Apple Developer account (for device/TestFlight iOS)
+- Google Play account (only when uploading AAB — Phase 8)
 - Privacy policy legal text (or approved draft)
 - Stripe live keys (only if enabling paid)
 - Google OAuth production client IDs
@@ -275,10 +320,11 @@ Human-required inputs (agents must not invent):
 
 | ID | Blocker | Owner |
 | --- | --- | --- |
-| B1 | Production host / domain not chosen | Human |
-| B2 | Play Console + EAS accounts | Human |
+| B1 | VPS + domain not chosen | Human |
+| B2 | EAS account; Apple Developer (for iOS device builds) | Human |
 | B3 | Privacy/terms legal copy | Human |
-| B4 | Whether v1 Android is free-only | Human (recommend: yes) |
+| B4 | Whether v1 mobile is free-only | Human (recommend: yes) |
+| B5 | Play Console (only if publishing AAB beyond sideload APK) | Human |
 
 ---
 
@@ -286,8 +332,9 @@ Human-required inputs (agents must not invent):
 
 Ship is allowed when:
 
-1. Phases **0–5** Done criteria are met (web production).
-2. Phase **6** Done criteria are met for **Closed Testing** (Android).
+1. Phases **0–5** Done criteria are met — monorepo VPS stack (Compose + Nginx + API + web + worker) on HTTPS.
+2. Phase **6** Done criteria are met — **Android APK** and **iOS build** both point at that server and complete the money loop.
 3. Phase **7** P7.4–P7.5 complete (security + acceptance honesty).
 4. Core ledger works with AI/OCR/billing **off**.
 5. No tracked secrets; `APP_ENV=production` uses secure cookies and no impersonation header.
+6. Store listing (Play/App Store) is **optional** and tracked in Phase 8 — not required for “server + APK/iOS pointing at server.”
