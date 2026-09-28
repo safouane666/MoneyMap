@@ -1,0 +1,32 @@
+{
+  "name": "@clear-money/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
+    "@clear-money/db": "workspace:*",
+    "@clear-money/domain": "workspace:*",
+    "@hono/node-server": "^1.14.1",
+    "better-auth": "^1.2.5",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.45.3",
+    "hono": "^4.7.5",
+    "stripe": "^17.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

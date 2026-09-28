@@ -1,0 +1,27 @@
+---
+description: Follow the production execution plan when implementing Clear Money launch work
+alwaysApply: true
+---
+
+# Production execution
+
+When the user asks to continue production, Play Store, launch, or “next phase” work, follow **`docs/PRODUCTION_PLAN.md`**.
+
+## Rules
+
+1. Complete **one phase at a time**. Do not start Phase N+1 until Phase N Done criteria pass.
+2. Prefer tasks marked `[ ]` in order (P0 → P1 → …). Check boxes to `[x]` when done.
+3. Keep the product light: no features outside the plan unless required for a Done criterion.
+4. Never commit `.env` or secrets. Never invent production credentials — record blockers in the plan’s **Open blockers** table.
+5. Match existing monorepo patterns (`apps/*`, `packages/*`). Run the Verify commands listed for the phase.
+6. Mobile v1 is **auth + personal space + add/list/sync** only. Full web parity is Phase 8 (optional).
+7. Android v1 is **free-only** unless the human explicitly prioritizes Play Billing.
+
+## Quick pointers
+
+- Acceptance matrix: `docs/ACCEPTANCE.md`
+- Design: `docs/DESIGN.md`
+- Seed / demo users: `packages/db/src/seed.ts`
+- Web API client + proxy: `apps/web/src/lib/api.ts`, `apps/web/src/app/cm-api/`
+- Auth: `apps/api/src/auth.ts`
+- Mobile (prototype): `apps/mobile/`

@@ -1,0 +1,102 @@
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { computePeriodTotals, formatMinorUnits, type LedgerTransaction } from '@clear-money/domain';
+import { t } from '@clear-money/i18n';
+import { Body, Title } from '../../src/components/ui';
+import { loadSetupSession } from '../../src/lib/setup-session';
+import { colors, radius, space } from '../../src/theme/tokens';
+
+export default function HomeScreen() {
+  const [locale, setLocale] = useState('en');
+  const [currency, setCurrency] = useState('USD');
+
+  useEffect(() => {
+    void loadSetupSession().then((s) => {
+      setLocale(s.locale);
+      setCurrency(s.currency);
+    });
+  }, []);
+
+  const sample: LedgerTransaction[] = [];
+  const totals = computePeriodTotals(sample, currency);
+
+  return (
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.brand}>{t(locale, 'brand.name')}</Text>
+        <Title>{t(locale, 'home.title')}</Title>
+        <Body>{t(locale, 'home.empty')}</Body>
+
+        <View style={styles.row}>
+          <SummaryCard
+            label={t(locale, 'home.net')}
+            value={formatMinorUnits(totals.netMinor, currency, locale)}
+          />
+          <SummaryCard
+            label={t(locale, 'home.income')}
+            value={formatMinorUnits(totals.incomeMinor, currency, locale)}
+            tone="income"
+          />
+          <SummaryCard
+            label={t(locale, 'home.expense')}
+            value={formatMinorUnits(totals.expenseMinor, currency, locale)}
+            tone="expense"
+          />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SummaryCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'income' | 'expense';
+}) {
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.cardValue,
+          tone === 'income' && { color: colors.income },
+          tone === 'expense' && { color: colors.expense },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.canvas },
+  content: { padding: space[6], paddingBottom: space[12] },
+  brand: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.brand,
+    marginBottom: space[2],
+    letterSpacing: 0.4,
+  },
+  row: { gap: space[3] },
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: space[4],
+  },
+  cardLabel: { color: colors.inkSecondary, fontSize: 13, marginBottom: space[1] },
+  cardValue: {
+    color: colors.ink,
+    fontSize: 22,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+});

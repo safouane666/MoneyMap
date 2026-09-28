@@ -1,0 +1,663 @@
+@import 'tailwindcss';
+@import '@clear-money/ui-tokens/tokens.css';
+
+@theme inline {
+  --color-canvas: var(--cm-canvas);
+  --color-surface: var(--cm-surface);
+  --color-elevated: var(--cm-elevated);
+  --color-ink: var(--cm-ink);
+  --color-ink-secondary: var(--cm-ink-secondary);
+  --color-ink-muted: var(--cm-ink-muted);
+  --color-brand: var(--cm-brand);
+  --color-brand-tint: var(--cm-brand-tint);
+  --color-income: var(--cm-income);
+  --color-expense: var(--cm-expense);
+  --color-warning: var(--cm-warning);
+  --color-ai: var(--cm-ai);
+  --color-info: var(--cm-info);
+  --color-border: var(--cm-border);
+  --radius-sm: var(--cm-radius-sm);
+  --radius-control: var(--cm-radius-control);
+  --radius-card: var(--cm-radius-card);
+  --radius-feature: var(--cm-radius-feature);
+  --radius-pill: var(--cm-radius-pill);
+  --font-sans: var(--cm-font);
+  --shadow-soft: var(--cm-shadow);
+  --spacing-sidebar: var(--cm-sidebar-width);
+  --spacing-content: var(--cm-content-max);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--cm-border);
+  }
+
+  html {
+    font-family: var(--cm-font);
+    color: var(--cm-ink);
+    background: var(--cm-canvas);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--cm-canvas);
+    color: var(--cm-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--cm-brand);
+    outline-offset: 2px;
+  }
+
+  .tabular,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .cm-shadow {
+    box-shadow: var(--cm-shadow);
+  }
+
+  .cm-content {
+    width: 100%;
+    max-width: var(--cm-content-max);
+    margin-inline: auto;
+  }
+
+  .animate-reveal {
+    animation: cm-reveal var(--cm-motion-slow) ease-out both;
+  }
+
+  .stagger-1 {
+    animation: cm-reveal var(--cm-motion-slow) ease-out both;
+    animation-delay: 40ms;
+  }
+  .stagger-2 {
+    animation: cm-reveal var(--cm-motion-slow) ease-out both;
+    animation-delay: 90ms;
+  }
+  .stagger-3 {
+    animation: cm-reveal var(--cm-motion-slow) ease-out both;
+    animation-delay: 140ms;
+  }
+  .stagger-4 {
+    animation: cm-reveal var(--cm-motion-slow) ease-out both;
+    animation-delay: 190ms;
+  }
+
+  .cm-aurora {
+    background:
+      radial-gradient(ellipse 70% 50% at 20% 0%, color-mix(in srgb, var(--cm-brand) 22%, transparent), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 90% 10%, color-mix(in srgb, var(--cm-income) 14%, transparent), transparent 55%),
+      linear-gradient(180deg, var(--cm-surface), var(--cm-canvas));
+    animation: cm-aurora-drift 14s ease-in-out infinite alternate;
+  }
+
+  .cm-sheet-in {
+    animation: cm-sheet-up var(--cm-motion-medium) ease-out both;
+  }
+
+  .cm-overlay-in {
+    animation: cm-fade-in var(--cm-motion-medium) ease-out both;
+  }
+
+  .cm-float {
+    animation: cm-float 6s ease-in-out infinite;
+  }
+
+  .cm-fab-pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cm-brand) 45%, transparent);
+    animation: cm-fab-ring 2.4s ease-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes cm-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes cm-sheet-up {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes cm-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes cm-aurora-drift {
+    from {
+      filter: hue-rotate(0deg);
+      background-position: 0% 0%, 100% 0%, 0 0;
+    }
+    to {
+      filter: hue-rotate(8deg);
+      background-position: 8% 4%, 92% 6%, 0 0;
+    }
+  }
+
+  @keyframes cm-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes cm-fab-ring {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--cm-brand) 40%, transparent);
+    }
+    70% {
+      box-shadow: 0 0 0 12px transparent;
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+
+  .cm-companion-in {
+    animation: cm-companion-slide var(--cm-motion-slow) ease-out both;
+  }
+
+  .cm-bubble-in {
+    animation: cm-bubble-pop 280ms ease-out both;
+  }
+
+  .cm-feature-fade {
+    animation: cm-fade-in var(--cm-motion-medium) ease-out both;
+  }
+
+  .cm-celebrate {
+    animation: cm-celebrate 900ms ease-out both;
+  }
+
+  .cm-confetti {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .cm-confetti span {
+    position: absolute;
+    top: -8px;
+    width: 8px;
+    height: 12px;
+    border-radius: 2px;
+    animation: cm-confetti-fall 1.1s ease-in forwards;
+  }
+
+  @keyframes cm-companion-slide {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes cm-bubble-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes cm-celebrate {
+    0% {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.03);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes cm-confetti-fall {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(120px) rotate(220deg);
+      opacity: 0;
+    }
+  }
+
+  /* Penny motion kit — gold coin + indigo orbit (from Orbit handoff) */
+  .pn {
+    display: block;
+    overflow: visible;
+  }
+  .pn .whole,
+  .pn .coin,
+  .pn .orbit {
+    transform-box: view-box;
+    transform-origin: 100px 100px;
+  }
+  .pn .fb {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .pn .whole {
+    animation: pn-float 3.8s ease-in-out infinite;
+  }
+  .pn .orbit {
+    animation: pn-orbit 7s ease-in-out infinite;
+  }
+  .pn .glint {
+    animation: pn-glint 4s linear infinite;
+  }
+  .pn .blk {
+    animation: pn-blink 5s infinite;
+  }
+
+  @keyframes pn-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes pn-orbit {
+    0%,
+    100% {
+      transform: rotate(-14deg);
+    }
+    50% {
+      transform: rotate(-8deg);
+    }
+  }
+  @keyframes pn-glint {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -480;
+    }
+  }
+  @keyframes pn-blink {
+    0%,
+    94%,
+    100% {
+      transform: scaleY(1);
+    }
+    96% {
+      transform: scaleY(0.1);
+    }
+  }
+  @keyframes pn-tilt {
+    0%,
+    100% {
+      transform: rotate(-3deg);
+    }
+    50% {
+      transform: rotate(3deg);
+    }
+  }
+  @keyframes pn-rock {
+    0%,
+    100% {
+      transform: rotate(-24deg);
+    }
+    50% {
+      transform: rotate(-4deg);
+    }
+  }
+  @keyframes pn-ponder {
+    0%,
+    100% {
+      transform: rotate(-3deg);
+    }
+    50% {
+      transform: rotate(-1deg) translateY(-3px);
+    }
+  }
+  @keyframes pn-dot {
+    0%,
+    100% {
+      transform: scale(0.5);
+      opacity: 0.3;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+  @keyframes pn-talk {
+    0%,
+    100% {
+      transform: scaleY(1);
+    }
+    50% {
+      transform: scaleY(0.35);
+    }
+  }
+  @keyframes pn-flip {
+    0% {
+      transform: scaleX(1);
+    }
+    25% {
+      transform: scaleX(0.06);
+    }
+    50% {
+      transform: scaleX(-1);
+    }
+    75% {
+      transform: scaleX(0.06);
+    }
+    100% {
+      transform: scaleX(1);
+    }
+  }
+  @keyframes pn-hop {
+    0%,
+    55%,
+    100% {
+      transform: translateY(0);
+    }
+    25% {
+      transform: translateY(-12px);
+    }
+  }
+  @keyframes pn-spark {
+    0%,
+    100% {
+      transform: scale(0.3) rotate(0);
+      opacity: 0.2;
+    }
+    50% {
+      transform: scale(1) rotate(25deg);
+      opacity: 1;
+    }
+  }
+  @keyframes pn-pop {
+    0%,
+    40%,
+    100% {
+      transform: scale(1);
+    }
+    12% {
+      transform: scale(1.06);
+    }
+    26% {
+      transform: scale(0.98);
+    }
+  }
+  @keyframes pn-badge {
+    0% {
+      transform: scale(0);
+      opacity: 1;
+    }
+    14% {
+      transform: scale(1.15);
+    }
+    24% {
+      transform: scale(1);
+    }
+    86% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+  @keyframes pn-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+  }
+  @keyframes pn-breathe {
+    0%,
+    100% {
+      transform: rotate(6deg) scale(1);
+    }
+    50% {
+      transform: rotate(6deg) scale(1.02, 0.98);
+    }
+  }
+  @keyframes pn-zzz {
+    0% {
+      transform: translate(0, 0) scale(0.6);
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(14px, -30px) scale(1.1);
+      opacity: 0;
+    }
+  }
+  @keyframes pn-heart {
+    0% {
+      transform: translateY(8px) scale(0.5);
+      opacity: 0;
+    }
+    25% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-34px) scale(1);
+      opacity: 0;
+    }
+  }
+
+  .pn.st-hello .whole {
+    animation: pn-tilt 1.6s ease-in-out infinite;
+  }
+  .pn.st-hello .orbit {
+    animation: pn-rock 1.6s ease-in-out infinite;
+  }
+
+  .pn.st-think .whole {
+    animation: pn-ponder 3s ease-in-out infinite;
+  }
+  .pn.st-think .glint {
+    animation-duration: 1.2s;
+  }
+  .pn .tdot {
+    animation: pn-dot 1.4s ease-in-out infinite;
+  }
+
+  .pn.st-answer .glint {
+    animation-duration: 2s;
+  }
+  .pn .talk {
+    animation: pn-talk 0.45s ease-in-out infinite;
+  }
+
+  .pn.st-flip .coin {
+    animation: pn-flip 1.2s ease-in-out infinite;
+  }
+  .pn.st-flip .glint {
+    animation-duration: 1.6s;
+  }
+
+  .pn.st-goal .whole {
+    animation: pn-hop 1.4s cubic-bezier(0.35, 0, 0.3, 1) infinite;
+  }
+  .pn.st-goal .glint {
+    animation-duration: 1.4s;
+  }
+  .pn .spark {
+    animation: pn-spark 1.6s ease-in-out infinite;
+  }
+
+  .pn.st-saved .coin {
+    animation: pn-pop 2.2s ease-out infinite;
+  }
+  .pn .badge {
+    animation: pn-badge 2.2s ease-out infinite;
+  }
+
+  .pn.st-alert .whole {
+    animation-duration: 2.8s;
+  }
+  .pn .pulse {
+    animation: pn-pulse 1.8s ease-in-out infinite;
+  }
+
+  .pn.st-sleep .whole {
+    animation: pn-breathe 4s ease-in-out infinite;
+  }
+  .pn.st-sleep .orbit {
+    animation: none;
+    transform: rotate(-6deg);
+    opacity: 0.35;
+  }
+  .pn.st-sleep .glint {
+    display: none;
+  }
+  .pn .z {
+    animation: pn-zzz 3.6s ease-out infinite;
+  }
+
+  .pn.st-thanks .whole {
+    animation: pn-tilt 2s ease-in-out infinite;
+  }
+  .pn .heart {
+    animation: pn-heart 2.1s ease-out infinite;
+  }
+
+  /* Currency roll — face cycles $ € £ ¥ ₹ DT while the coin turns */
+  .pn.st-roll .coin {
+    animation: pn-rollr 3.2s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+  }
+  .pn.st-roll .glint {
+    animation-duration: 1.6s;
+  }
+  .pn .sym {
+    opacity: 0;
+    animation: pn-sym 9.6s linear infinite;
+  }
+  @keyframes pn-rollr {
+    0% {
+      transform: rotate(0);
+    }
+    31%,
+    50% {
+      transform: rotate(360deg);
+    }
+    81%,
+    100% {
+      transform: rotate(720deg);
+    }
+  }
+  @keyframes pn-sym {
+    0%,
+    16.6% {
+      opacity: 1;
+    }
+    16.7%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .cm-penny-static .pn .whole,
+  .cm-penny-static .pn .orbit,
+  .cm-penny-static .pn .glint,
+  .cm-penny-static .pn .blk,
+  .cm-penny-static .pn .tdot,
+  .cm-penny-static .pn .talk,
+  .cm-penny-static .pn .spark,
+  .cm-penny-static .pn .badge,
+  .cm-penny-static .pn .pulse,
+  .cm-penny-static .pn .z,
+  .cm-penny-static .pn .heart,
+  .cm-penny-static .pn .sym,
+  .cm-penny-static .pn .coin {
+    animation: none !important;
+  }
+
+  /* Small UI: keep orbit motion; skip blink (reads as blur at tiny sizes) */
+  .pn.pn-compact .blk {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-reveal,
+    .stagger-1,
+    .stagger-2,
+    .stagger-3,
+    .stagger-4,
+    .cm-sheet-in,
+    .cm-overlay-in,
+    .cm-aurora,
+    .cm-float,
+    .cm-fab-pulse::after,
+    .cm-companion-in,
+    .cm-bubble-in,
+    .cm-feature-fade,
+    .cm-celebrate,
+    .cm-confetti span,
+    .pn .whole,
+    .pn .orbit,
+    .pn .glint,
+    .pn .blk,
+    .pn .tdot,
+    .pn .talk,
+    .pn .spark,
+    .pn .badge,
+    .pn .pulse,
+    .pn .z,
+    .pn .heart,
+    .pn .sym,
+    .pn .coin {
+      animation: none !important;
+      filter: none !important;
+      transform: none !important;
+    }
+  }
+}
