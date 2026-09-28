@@ -117,9 +117,9 @@ pnpm --filter @clear-money/web test
 - [x] **P2.2** Scope mutations by `spaceId` (PATCH/DELETE/confirm must assert txn belongs to space).
 - [x] **P2.3** Surface API errors on add/undo (stop swallowing `.catch(() => undefined)` in `apps/web/src/lib/ledger.tsx`).
 - [x] **P2.4** Decide transfer product: **deferred** — no transfer UI in v1; domain still excludes `transfer` from net; seed may include a transfer row for totals tests only.
-- [ ] **P2.5** Reports: use API `/spaces/:id/reports` or keep client totals but add parity test against domain fixtures.
+- [x] **P2.5** Reports: keep client totals via domain `computePeriodTotals`; parity covered by `apps/web/src/lib/demo-state.totals.test.ts`.
 - [x] **P2.6** Fix Reports → Time tab (chart or remove tab until real).
-- [ ] **P2.7** Settings currency must update user profile / active display path consistently (not only `cm.setup.session`).
+- [x] **P2.7** Settings currency updates active space via API and also PATCHes `/me` `defaultCurrency` (`ledger.updateSpace`).
 
 ### Done when
 
