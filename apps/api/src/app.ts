@@ -97,6 +97,11 @@ export function createApp() {
   app.get('/health', (c) => c.json({ ok: true, service: 'clear-money-api' }));
 
   app.get('/public/billing-config', (c) => c.json(billingPublicConfig()));
+  app.get('/public/auth-config', (c) =>
+    c.json({
+      googleEnabled: Boolean(config.googleClientId && config.googleClientSecret),
+    }),
+  );
 
   app.use('/cm-api/auth/*', async (c, next) => {
     if (!rateLimit(`auth:${c.req.header('x-forwarded-for') ?? 'local'}`, 30, 60_000)) {

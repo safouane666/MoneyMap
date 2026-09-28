@@ -120,3 +120,13 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 - `BETA_FREE_MODE=true` keeps billing in free/beta mode until Stripe live is intentional.
 - Privacy/terms routes are hosted at `/privacy` and `/terms`; replace placeholder copy with legal text before store listing.
 - Optional crash reporting: set `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` (web) and `EXPO_PUBLIC_SENTRY_DSN` (mobile), then install the Sentry SDK — stubs no-op when unset (see Phase 7 / P7.1).
+
+## Google OAuth (optional)
+
+1. Create an OAuth client in Google Cloud Console (Web application).
+2. Authorized JavaScript origins: `https://your.domain.example` (and `http://localhost:8259` for local).
+3. Authorized redirect URIs (Better Auth callback):
+   - `https://your.domain.example/cm-api/auth/callback/google`
+   - `http://localhost:8259/cm-api/auth/callback/google` (local)
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.production`. If unset, the Google button is hidden (`GET /public/auth-config`).
+5. After Google sign-in, the web ledger applies setup locale/currency via `/me/setup-complete` (same prefs as email sign-up).

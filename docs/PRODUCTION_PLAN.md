@@ -87,7 +87,7 @@ pnpm test
 - [x] **P1.2** Confirm Better Auth `baseURL` / `basePath` / web `/cm-api` proxy stay aligned (`apps/api/src/auth.ts`, `apps/web/src/app/cm-api/[...path]/route.ts`).
 - [x] **P1.3** Production cookie posture: `useSecureCookies: true` when HTTPS; trusted origins from env only.
 - [x] **P1.4** Wire Settings → Export (`GET /account/export`) and Delete (`POST /account/delete`) in `apps/web/src/app/app/settings/page.tsx`.
-- [ ] **P1.5** Google OAuth: document redirect URIs; fail gracefully if unset; complete setup prefs after social sign-in (parity with email `setup-complete`).
+- [x] **P1.5** Google OAuth: document redirect URIs; fail gracefully if unset; complete setup prefs after social sign-in (parity with email `setup-complete`).
 - [x] **P1.6** Replace hardcoded LAN URLs in i18n `auth.serverUnreachable` with generic copy or `WEB_URL`-derived messaging.
 
 ### Done when

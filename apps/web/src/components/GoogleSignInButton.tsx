@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n';
-import { ApiError, startGoogleSignIn } from '@/lib/api';
+import { ApiError, apiFetch, startGoogleSignIn } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
 /** Google rejects OAuth redirect_uri on private LAN IPs (192.168/10/172.16). */
@@ -30,8 +30,23 @@ export function GoogleSignInButton({
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const onLan =
     typeof window !== 'undefined' && isPrivateLanHost(window.location.hostname);
+
+  useEffect(() => {
+    void apiFetch<{ googleEnabled?: boolean }>('/public/auth-config')
+      .then((result) => {
+        if (result.offline || !result.data) {
+          setGoogleEnabled(false);
+          return;
+        }
+        setGoogleEnabled(Boolean(result.data.googleEnabled));
+      })
+      .catch(() => setGoogleEnabled(false));
+  }, []);
+
+  if (googleEnabled !== true) return null;
 
   const onClick = async () => {
     setBusy(true);
