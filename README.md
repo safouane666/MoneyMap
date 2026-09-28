@@ -51,6 +51,8 @@ See [docs/DESIGN.md](docs/DESIGN.md). Acceptance matrix: [docs/ACCEPTANCE.md](do
 
 Agent-executable roadmap to production web + Play Closed Testing: [docs/PRODUCTION_PLAN.md](docs/PRODUCTION_PLAN.md). Work one phase at a time; mark tasks `[x]` when Done criteria pass.
 
+Pre-deploy product pack (duration goals, recurring salary/subscriptions, filtered activity/reports): [docs/FEATURES_GOALS_RECURRING.md](docs/FEATURES_GOALS_RECURRING.md).
+
 ## Tests
 
 ```bash

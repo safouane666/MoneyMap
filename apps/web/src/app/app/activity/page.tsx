@@ -1,7 +1,15 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { formatDate, formatMinorUnits, type LedgerTransaction } from '@clear-money/domain';
 import { Badge } from '@/components/ui/badge';
+import { ExportDialog } from '@/components/ExportDialog';
+import {
+  MonthYearFilter,
+  currentMonthYear,
+  inMonthYear,
+  type MonthYear,
+} from '@/components/MonthYearFilter';
 import { SwipeableActivityRow } from '@/components/SwipeableActivityRow';
 import { useToast } from '@/components/Toast';
 import { useI18n } from '@/lib/i18n';
@@ -47,7 +55,17 @@ export default function ActivityPage() {
   const { state, hideTransaction, unhideTransaction, undoTransaction, restoreTransaction } =
     useLedger();
   const { showToast } = useToast();
-  const txns = getVisibleSpaceTransactions(state).filter((txn) => txn.type !== 'transfer');
+  const [monthYear, setMonthYear] = useState<MonthYear>(currentMonthYear);
+
+  const txns = useMemo(
+    () =>
+      getVisibleSpaceTransactions(state).filter(
+        (txn) => txn.type !== 'transfer' && inMonthYear(txn.occurredAt, monthYear),
+      ),
+    [state, monthYear],
+  );
+
+  const fileSuffix = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, '0')}`;
 
   const handleHide = (id: string) => {
     hideTransaction(id);
@@ -69,9 +87,19 @@ export default function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <div className="animate-reveal">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('nav.activity')}</h1>
-        <p className="mt-1 text-sm text-ink-secondary">{t('app.swipeHint')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3 animate-reveal">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('nav.activity')}</h1>
+          <p className="mt-1 text-sm text-ink-secondary">{t('app.swipeHint')}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthYearFilter value={monthYear} onChange={setMonthYear} />
+          <ExportDialog
+            transactions={txns}
+            fileSuffix={fileSuffix}
+            description={`CSV for ${fileSuffix} (${txns.length} rows).`}
+          />
+        </div>
       </div>
       {txns.length === 0 ? (
         <div className="animate-reveal stagger-1 rounded-[var(--cm-radius-card)] border border-dashed border-border bg-surface px-6 py-12 text-center">

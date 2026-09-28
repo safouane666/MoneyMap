@@ -132,6 +132,8 @@
   },
   "app": {
     "net": "Net result",
+    "saves": "Overall saves",
+    "pickMonth": "Pick month",
     "safeToSpend": "Safe to spend",
     "safeToSpendHint": "Income minus expenses and planned goal contributions this period.",
     "shareCard": "Share this month",

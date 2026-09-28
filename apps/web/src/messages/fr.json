@@ -132,6 +132,8 @@
   },
   "app": {
     "net": "Résultat net",
+    "saves": "Épargne nette",
+    "pickMonth": "Choisir le mois",
     "safeToSpend": "Reste à dépenser",
     "safeToSpendHint": "Revenus moins dépenses et contributions prévues aux objectifs sur la période.",
     "shareCard": "Partager ce mois",
