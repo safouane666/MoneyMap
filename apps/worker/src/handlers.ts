@@ -1,4 +1,5 @@
 import { createId } from '@clear-money/domain';
+import { postDueRecurring, type Database } from '@clear-money/db';
 import { fakeAiMonthlyReport, fakeOcrReceipt, ProviderUnavailableError } from './providers.js';
 import type { ExportResult, JobRecord, JobResult, JobType } from './types.js';
 import { JOB_TYPES } from './types.js';
@@ -48,11 +49,19 @@ function buildExport(
   };
 }
 
+export type RunJobHandlerOptions = {
+  db?: Database;
+};
+
 /**
  * Pure-ish handler: runs provider work for a job.
  * Idempotent callers should skip when status is already succeeded.
+ * `post_due_recurring` requires `opts.db`.
  */
-export async function runJobHandler(job: JobRecord): Promise<JobResult> {
+export async function runJobHandler(
+  job: JobRecord,
+  opts: RunJobHandlerOptions = {},
+): Promise<JobResult> {
   if (!isJobType(job.type)) {
     throw new Error(`Unknown job type: ${job.type}`);
   }
@@ -89,6 +98,25 @@ export async function runJobHandler(job: JobRecord): Promise<JobResult> {
 
     case 'export_pdf':
       return buildExport('pdf', payload);
+
+    case 'post_due_recurring': {
+      if (!opts.db) {
+        throw new Error('post_due_recurring requires database');
+      }
+      const spaceId = asString(payload.spaceId, job.spaceId ?? '') || undefined;
+      const result = await postDueRecurring(opts.db, {
+        spaceId,
+        actorUserId: job.userId,
+        now: new Date(),
+      });
+      return {
+        kind: 'post_due_recurring',
+        posted: result.posted,
+        skipped: result.skipped,
+        transactionIds: result.transactionIds,
+        requiresConfirmation: false,
+      };
+    }
 
     default: {
       const _exhaustive: never = job.type;

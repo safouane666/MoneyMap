@@ -20,12 +20,26 @@ export interface DemoCategory {
   type: 'income' | 'expense';
 }
 
+export type RecurringItem = {
+  id: string;
+  spaceId: string;
+  name: string;
+  amountMinor: number;
+  currency: string;
+  kind: 'income' | 'expense';
+  dayOfMonth: number;
+  nextDueAt: string | null;
+  active: boolean;
+  notifyHoursBefore: number;
+};
+
 export interface DemoState {
   spaces: DemoSpace[];
   activeSpaceId: string;
   transactions: LedgerTransaction[];
   categories: DemoCategory[];
   goals: Goal[];
+  recurring: RecurringItem[];
   /** Soft-hidden from activity lists; still counted in totals. */
   hiddenIds: string[];
   userId: string;
@@ -44,6 +58,7 @@ export function emptyState(): DemoState {
     categories: [],
     transactions: [],
     goals: [],
+    recurring: [],
     hiddenIds: [],
   };
 }
@@ -60,8 +75,21 @@ function normalizeState(parsed: Partial<DemoState>): DemoState {
     categories: parsed.categories ?? [],
     transactions: (parsed.transactions ?? []).filter((t) => t.type !== 'transfer'),
     goals: parsed.goals ?? [],
+    recurring: parsed.recurring ?? [],
     hiddenIds: Array.isArray(parsed.hiddenIds) ? parsed.hiddenIds : [],
   };
+}
+
+export function getSpaceRecurring(state: DemoState, spaceId?: string, kind?: 'income' | 'expense') {
+  const id = spaceId ?? state.activeSpaceId;
+  if (!id) return [];
+  return state.recurring.filter(
+    (r) => r.spaceId === id && r.active && (kind === undefined || r.kind === kind),
+  );
+}
+
+export function sumActiveRecurringExpensesMinor(state: DemoState, spaceId?: string): number {
+  return getSpaceRecurring(state, spaceId, 'expense').reduce((s, r) => s + r.amountMinor, 0);
 }
 
 export function loadDemoState(): DemoState {

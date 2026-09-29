@@ -7,3 +7,4 @@ export * from './permissions/index.js';
 export * from './entitlements/index.js';
 export * from './notifications/index.js';
 export * from './locale/index.js';
+export * from './recurring/index.js';

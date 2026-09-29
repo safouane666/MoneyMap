@@ -4,6 +4,7 @@ export type NotificationCategory =
   | 'time_pattern'
   | 'category_change'
   | 'savings_goal'
+  | 'subscription_due'
   | 'safe_to_spend'
   | 'weekly_review'
   | 'gentle_inactivity';
@@ -51,6 +52,45 @@ export interface ScheduleDiff {
 }
 
 const MIN_SAMPLE = 5;
+const DEFAULT_SUBSCRIPTION_NOTIFY_HOURS = 24;
+
+function factNumber(facts: Record<string, string | number>, key: string): number | null {
+  const v = facts[key];
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function isTruthyFact(facts: Record<string, string | number>, key: string): boolean {
+  const v = facts[key];
+  if (v === 0 || v === '0' || v === '') return false;
+  return v !== undefined && v !== null;
+}
+
+/** Savings goal reminders only when pacing is tight or behind (not on track / ahead). */
+export function shouldPlanSavingsGoalNotification(
+  facts: Record<string, string | number>,
+): boolean {
+  const pace = facts.goalPace;
+  if (pace === 'tight' || pace === 'behind') return true;
+  if (isTruthyFact(facts, 'goalTight')) return true;
+  return false;
+}
+
+/** Subscription renewal reminder within the configured notify window (default 24h). */
+export function shouldPlanSubscriptionDueNotification(
+  facts: Record<string, string | number>,
+): boolean {
+  if (isTruthyFact(facts, 'subscriptionDueSoon')) return true;
+  const hoursUntil = factNumber(facts, 'hoursUntilSubscriptionDue');
+  if (hoursUntil === null) return false;
+  const window =
+    factNumber(facts, 'subscriptionNotifyHoursBefore') ?? DEFAULT_SUBSCRIPTION_NOTIFY_HOURS;
+  return hoursUntil >= 0 && hoursUntil <= window;
+}
 
 function inQuietHours(hour: number, start: number, end: number): boolean {
   if (start === end) return false;
@@ -116,7 +156,12 @@ export function planNotifications(input: {
   add('daily_spend_fact', 'notif.daily_spend_fact', '/app/reports', true);
   add('time_pattern', 'notif.time_pattern', '/app/reports?tab=time', true);
   add('category_change', 'notif.category_change', '/app/reports?tab=categories', true);
-  add('savings_goal', 'notif.savings_goal', '/app/goals', false);
+  if (shouldPlanSavingsGoalNotification(snapshot.facts)) {
+    add('savings_goal', 'notif.savings_goal', '/app/goals', false);
+  }
+  if (shouldPlanSubscriptionDueNotification(snapshot.facts)) {
+    add('subscription_due', 'notif.subscription_due', '/app/home', false);
+  }
   add('safe_to_spend', 'notif.safe_to_spend', '/app/goals', false);
   add('gentle_inactivity', 'notif.gentle_inactivity', '/app/home', false);
   add('weekly_review', 'notif.weekly_review', '/app/reports', false);
@@ -144,4 +189,54 @@ export function formatNotificationPreview(
   if (mode === 'full') return fullBody;
   if (mode === 'summary') return summaryBody;
   return 'Your Clear Money update is ready.';
+}
+
+/**
+ * Build planner facts for savings-goal pace + subscription renewals.
+ * Callers merge into NotificationSnapshot.facts before planNotifications.
+ */
+export function buildEngagementFacts(input: {
+  goals?: Array<{ paceStatus?: string; notificationPolicy?: string; status?: string }>;
+  recurring?: Array<{
+    nextDueAt?: string | null;
+    notifyHoursBefore?: number | null;
+    active?: boolean;
+  }>;
+  now?: Date;
+}): Record<string, string | number> {
+  const now = input.now ?? new Date();
+  const facts: Record<string, string | number> = {};
+
+  const activeGoals = (input.goals ?? []).filter((g) => !g.status || g.status === 'active');
+  const worst = activeGoals.find(
+    (g) =>
+      (g.notificationPolicy === undefined || g.notificationPolicy !== 'off') &&
+      (g.paceStatus === 'behind' || g.paceStatus === 'tight'),
+  );
+  if (worst?.paceStatus === 'behind' || worst?.paceStatus === 'tight') {
+    facts.goalPace = worst.paceStatus;
+    facts.goalTight = 1;
+  }
+
+  let soonestHours: number | null = null;
+  let notifyWindow = DEFAULT_SUBSCRIPTION_NOTIFY_HOURS;
+  for (const item of input.recurring ?? []) {
+    if (item.active === false || !item.nextDueAt) continue;
+    const dueMs = new Date(item.nextDueAt).getTime();
+    if (!Number.isFinite(dueMs)) continue;
+    const hours = (dueMs - now.getTime()) / 3_600_000;
+    if (hours < 0) continue;
+    const window = item.notifyHoursBefore ?? DEFAULT_SUBSCRIPTION_NOTIFY_HOURS;
+    if (soonestHours === null || hours < soonestHours) {
+      soonestHours = hours;
+      notifyWindow = window;
+    }
+  }
+  if (soonestHours !== null) {
+    facts.hoursUntilSubscriptionDue = Math.round(soonestHours * 10) / 10;
+    facts.subscriptionNotifyHoursBefore = notifyWindow;
+    if (soonestHours <= notifyWindow) facts.subscriptionDueSoon = 1;
+  }
+
+  return facts;
 }

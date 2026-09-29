@@ -172,6 +172,35 @@
     "timeEmpty": "لا توجد بيانات كافية لأنماط الزمن.",
     "timeReady": "{count} قيود مؤكدة في {space}. تتحسن الأنماط مع الإضافة."
   },
+  "recurring": {
+    "salaryTitle": "الراتب والدخل",
+    "subscriptionsTitle": "الاشتراكات",
+    "salaryEmpty": "لا دخل متكرر بعد.",
+    "subscriptionsEmpty": "لا اشتراكات بعد.",
+    "addSalary": "إضافة دخل",
+    "addSubscription": "إضافة اشتراك",
+    "editSalary": "تعديل الدخل",
+    "editSubscription": "تعديل الاشتراك",
+    "name": "الاسم",
+    "amount": "المبلغ",
+    "dayOfMonth": "يوم الشهر",
+    "dayHint": "استخدم 1–28 ليتوفر هذا اليوم كل شهر.",
+    "dayLabel": "اليوم {day}",
+    "nextDue": "التالي",
+    "dueSoon": "مستحق خلال 24 ساعة",
+    "dueSoonToast": "مستحق قريبًا: {names}",
+    "save": "حفظ",
+    "saving": "جارٍ الحفظ…",
+    "saveFailed": "تعذر الحفظ",
+    "invalidAmount": "أدخل مبلغًا صالحًا",
+    "invalidDay": "يجب أن يكون اليوم بين 1 و 28",
+    "invalidName": "الاسم مطلوب",
+    "needLogin": "سجّل الدخول لإدارة الراتب والاشتراكات.",
+    "edit": "تعديل",
+    "remove": "إزالة",
+    "removed": "تمت الإزالة",
+    "removeFailed": "تعذرت الإزالة"
+  },
   "goals": {
     "title": "الأهداف",
     "progress": "التقدم",
@@ -193,7 +222,24 @@
     "needLogin": "سجّل الدخول لإنشاء الأهداف.",
     "freeCap": "المجاني: حتى 3 أهداف. ترقَّ لمزيد.",
     "lockedTitle": "تم بلوغ الحد",
-    "lockedBody": "المجاني يتضمن 3 أهداف. جرّب Plus محليًا."
+    "lockedBody": "المجاني يتضمن 3 أهداف. جرّب Plus محليًا.",
+    "duration": "المدة",
+    "durationMonths": "{count} أشهر",
+    "durationLabel": "المدة (بالأشهر)",
+    "startDate": "تاريخ البدء",
+    "startDateHint": "اليوم افتراضيًا",
+    "invalidDuration": "أدخل شهرًا واحدًا على الأقل",
+    "monthlyTarget": "الهدف الشهري",
+    "timeline": "الجدول الزمني",
+    "expectedVsSaved": "المتوقع / المدخر",
+    "pace": {
+      "ahead": "متقدم",
+      "on_track": "على المسار",
+      "tight": "ضيق",
+      "behind": "متأخر",
+      "won": "تحقق",
+      "lost": "فات"
+    }
   },
   "spaces": {
     "title": "المساحات",
@@ -342,6 +388,16 @@
     "goalHit": "{amount} أنهى الأمر — «{goal}» يبدو مكتملاً. أحسنت."
   },
   "empty": "لا شيء بعد",
+  "notif": {
+    "savings_goal": {
+      "title": "هدف الادّخار يحتاج انتباهًا",
+      "body": "أنت متأخر أو على وشك التأخر في هدف — افتح الأهداف."
+    },
+    "subscription_due": {
+      "title": "تجديد اشتراك قريبًا",
+      "body": "دفعة متكررة مستحقة خلال 24 ساعة — راجع الصفحة الرئيسية."
+    }
+  },
   "account": {
     "title": "الحساب",
     "status": "الحالة",

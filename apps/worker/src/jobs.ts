@@ -1,10 +1,13 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
-import { createDb, jobs } from '@clear-money/db';
+import { createDb, evaluateActiveGoals, jobs, postDueRecurring } from '@clear-money/db';
 import type { JobRecord } from './types.js';
 import { JOB_TYPES } from './types.js';
 import { failureMessage, runJobHandler } from './handlers.js';
 
 export type WorkerDb = ReturnType<typeof createDb>;
+
+const RECURRING_SWEEP_MS = Number(process.env.RECURRING_SWEEP_MS ?? 60_000);
+const GOAL_EVAL_SWEEP_MS = Number(process.env.GOAL_EVAL_SWEEP_MS ?? 900_000);
 
 function toRecord(row: typeof jobs.$inferSelect): JobRecord {
   return {
@@ -103,7 +106,7 @@ export async function processJob(db: WorkerDb, job: JobRecord): Promise<void> {
   }
 
   try {
-    const result = await runJobHandler(job);
+    const result = await runJobHandler(job, { db });
     await markSucceeded(db, job.id, result as unknown as Record<string, unknown>);
   } catch (err) {
     await markFailed(db, job.id, failureMessage(err));
@@ -120,11 +123,17 @@ export async function pollOnce(db: WorkerDb): Promise<boolean> {
 export function startPollLoop(options: {
   db: WorkerDb;
   intervalMs?: number;
+  recurringSweepMs?: number;
+  goalEvalSweepMs?: number;
   signal?: AbortSignal;
 }): { stop: () => void } {
   const intervalMs = options.intervalMs ?? 2000;
+  const recurringSweepMs = options.recurringSweepMs ?? RECURRING_SWEEP_MS;
+  const goalEvalSweepMs = options.goalEvalSweepMs ?? GOAL_EVAL_SWEEP_MS;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let lastRecurringSweep = 0;
+  let lastGoalEvalSweep = 0;
 
   const tick = async () => {
     if (stopped || options.signal?.aborted) return;
@@ -132,6 +141,35 @@ export function startPollLoop(options: {
       let worked = true;
       while (worked && !stopped) {
         worked = await pollOnce(options.db);
+      }
+
+      const now = Date.now();
+      if (now - lastRecurringSweep >= recurringSweepMs) {
+        lastRecurringSweep = now;
+        try {
+          const result = await postDueRecurring(options.db, { now: new Date() });
+          if (result.posted > 0) {
+            console.log(
+              `[worker] post_due_recurring posted=${result.posted} skipped=${result.skipped}`,
+            );
+          }
+        } catch (err) {
+          console.error('[worker] post_due_recurring sweep error', failureMessage(err));
+        }
+      }
+
+      if (now - lastGoalEvalSweep >= goalEvalSweepMs) {
+        lastGoalEvalSweep = now;
+        try {
+          const goalResult = await evaluateActiveGoals(options.db, { now: new Date(now) });
+          if (goalResult.evaluated > 0) {
+            console.log(
+              `[worker] evaluate_goals evaluated=${goalResult.evaluated} completed=${goalResult.completed}`,
+            );
+          }
+        } catch (err) {
+          console.error('[worker] evaluate_goals sweep error', failureMessage(err));
+        }
       }
     } catch (err) {
       console.error('[worker] poll error', failureMessage(err));

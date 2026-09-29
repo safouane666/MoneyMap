@@ -4,6 +4,7 @@ export const JOB_TYPES = [
   'ai_monthly_report',
   'export_xlsx',
   'export_pdf',
+  'post_due_recurring',
 ] as const;
 
 export type JobType = (typeof JOB_TYPES)[number];
@@ -61,4 +62,16 @@ export interface ExportResult {
   requiresConfirmation: false;
 }
 
-export type JobResult = OcrDraftResult | AiReportDraftResult | ExportResult;
+export interface PostDueRecurringJobResult {
+  kind: 'post_due_recurring';
+  posted: number;
+  skipped: number;
+  transactionIds: string[];
+  requiresConfirmation: false;
+}
+
+export type JobResult =
+  | OcrDraftResult
+  | AiReportDraftResult
+  | ExportResult
+  | PostDueRecurringJobResult;

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   currencyDecimalPlaces,
+  monthlyTargetMinor,
   parseDisplayAmount,
   type CurrencyCode,
   type LedgerTransaction,
@@ -174,7 +175,7 @@ function ChipRow({
   );
 }
 
-function applyImmediateActions(
+async function applyImmediateActions(
   actions: AiAction[],
   helpers: {
     currency: string;
@@ -196,6 +197,14 @@ function applyImmediateActions(
       id: string,
       patch: { description?: string | null; categoryId?: string | null },
     ) => void;
+    createGoal: (input: {
+      name: string;
+      targetMinor: number;
+      currency: string;
+      durationMonths: number;
+      startDate?: string;
+      plannedContributionMinor?: number;
+    }) => Promise<unknown>;
   },
 ) {
   const reports: Array<{ title: string; body: string }> = [];
@@ -205,6 +214,8 @@ function applyImmediateActions(
   let categorySuggestions: AiSuggestion[] = [];
   let lastCreatedId: string | null = null;
   let updated = 0;
+  let goalsCreated = 0;
+  let lastGoalName: string | null = null;
 
   const resolveId = (name: string | undefined, type: 'income' | 'expense') => {
     if (!name) return null;
@@ -284,17 +295,54 @@ function applyImmediateActions(
       });
       lastCreatedId = txn.id;
       applied += 1;
+    } else if (action.type === 'create_goal') {
+      const targetMinor = majorToMinorSafe(action.targetMajor, helpers.currency);
+      if (targetMinor == null) continue;
+      const durationMonths =
+        Number.isFinite(action.durationMonths) && action.durationMonths >= 1
+          ? Math.floor(action.durationMonths)
+          : 1;
+      const plannedContributionMinor = monthlyTargetMinor({
+        targetMinor,
+        durationMonths,
+        plannedContributionMinor: 0,
+      });
+      try {
+        await helpers.createGoal({
+          name: action.name.trim(),
+          targetMinor,
+          currency: helpers.currency,
+          durationMonths,
+          startDate: action.startDate,
+          plannedContributionMinor,
+        });
+        goalsCreated += 1;
+        lastGoalName = action.name.trim();
+        applied += 1;
+      } catch {
+        // offline / cap — leave reply to explain
+      }
     } else if (action.type === 'report') {
       reports.push({ title: action.title, body: action.body });
     }
   }
 
-  return { applied, reports, pending, categorySuggestions, lastCreatedId, updated };
+  return {
+    applied,
+    reports,
+    pending,
+    categorySuggestions,
+    lastCreatedId,
+    updated,
+    goalsCreated,
+    lastGoalName,
+  };
 }
 
 export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t, locale } = useI18n();
-  const { state, addCategory, addTransaction, updateTransaction, signedIn } = useLedger();
+  const { state, addCategory, addTransaction, updateTransaction, createGoal, signedIn } =
+    useLedger();
   const { showToast } = useToast();
   const { notifyEntry } = usePennyNotify();
   const [input, setInput] = useState('');
@@ -716,7 +764,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         );
       }
 
-      const result = applyImmediateActions(actions, {
+      const result = await applyImmediateActions(actions, {
         currency: space.currency,
         spaceId: space.id,
         categories: state.categories,
@@ -724,6 +772,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         addCategory,
         addTransaction,
         updateTransaction,
+        createGoal,
       });
 
       const suggestions = data.suggestions ?? result.categorySuggestions;
@@ -776,7 +825,13 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
             report: result.reports[0],
           },
         ]);
-        if (savedForReal) {
+        if (result.goalsCreated > 0) {
+          showToast({
+            message: result.lastGoalName
+              ? `Goal “${result.lastGoalName}” created`
+              : t('ai.applied'),
+          });
+        } else if (savedForReal) {
           showToast({
             message: result.updated > 0 ? t('ai.updated') : t('ai.applied'),
           });

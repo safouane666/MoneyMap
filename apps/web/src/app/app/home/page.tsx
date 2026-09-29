@@ -3,7 +3,13 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import { computeSafeToSpend, formatDate, formatMinorUnits, goalRemaining } from '@clear-money/domain';
+import {
+  computeSafeToSpend,
+  formatDate,
+  formatMinorUnits,
+  goalRemaining,
+  monthlyTargetMinor,
+} from '@clear-money/domain';
 import { SummaryCard } from '@/components/SummaryCard';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
 import { GoalCard } from '@/components/GoalCard';
@@ -21,7 +27,9 @@ import {
   getSpaceTotals,
   getSpaceTransactions,
   getVisibleSpaceTransactions,
+  sumActiveRecurringExpensesMinor,
 } from '@/lib/demo-state';
+import { RecurringHomeSection } from '@/components/RecurringHomeSection';
 import type { LedgerTransaction } from '@clear-money/domain';
 
 function inPeriod(iso: string, period: Period): boolean {
@@ -59,20 +67,37 @@ export default function HomePage() {
 
   const goal = state.goals.find((g) => g.spaceId === space.id && g.status === 'active');
 
+  const scheduledExpenseMinor = useMemo(
+    () => sumActiveRecurringExpensesMinor(state, space.id),
+    [state, space.id],
+  );
+
   const safe = useMemo(() => {
     const planned = state.goals
       .filter((g) => g.spaceId === space.id && g.status === 'active')
-      .reduce((sum, g) => sum + (g.plannedContributionMinor ?? 0), 0);
+      .reduce(
+        (sum, g) =>
+          sum + (g.plannedContributionMinor > 0 ? g.plannedContributionMinor : monthlyTargetMinor(g)),
+        0,
+      );
     return computeSafeToSpend({
       incomeMinor: totals.incomeMinor,
       expenseMinor: totals.expenseMinor,
       plannedContributionMinor: planned,
-      scheduledExpenseMinor: 0,
+      scheduledExpenseMinor,
       bufferMinor: 0,
       currency: totals.currency,
       hasRequiredInputs: filtered.length > 0 || totals.incomeMinor > 0,
     });
-  }, [filtered.length, space.id, state.goals, totals.currency, totals.expenseMinor, totals.incomeMinor]);
+  }, [
+    filtered.length,
+    space.id,
+    scheduledExpenseMinor,
+    state.goals,
+    totals.currency,
+    totals.expenseMinor,
+    totals.incomeMinor,
+  ]);
 
   const recent = getVisibleSpaceTransactions(state)
     .filter((txn) => txn.type !== 'transfer' && inPeriod(txn.occurredAt, period))
@@ -116,6 +141,8 @@ export default function HomePage() {
         </div>
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
+
+      <RecurringHomeSection spaceId={space.id} currency={space.currency} />
 
       <div className="space-y-4">
         <SummaryCard

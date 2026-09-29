@@ -184,8 +184,13 @@ export const goals = pgTable('goals', {
   targetMinor: integer('target_minor').notNull(),
   savedMinor: integer('saved_minor').notNull().default(0),
   currency: text('currency').notNull(),
+  /** ISO date YYYY-MM-DD; null for legacy goals without duration pacing */
+  startDate: text('start_date'),
+  durationMonths: integer('duration_months').notNull().default(1),
   targetDate: text('target_date').notNull(),
   plannedContributionMinor: integer('planned_contribution_minor').notNull().default(0),
+  /** ahead | on_track | tight | behind | won | lost */
+  paceStatus: text('pace_status').notNull().default('on_track'),
   notificationPolicy: text('notification_policy').notNull().default('weekly'),
   status: text('status').notNull().default('active'),
   createdBy: text('created_by')
@@ -209,17 +214,32 @@ export const contributions = pgTable('contributions', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const scheduledExpenses = pgTable('scheduled_expenses', {
-  id: text('id').primaryKey(),
-  spaceId: text('space_id')
-    .notNull()
-    .references(() => spaces.id),
-  name: text('name').notNull(),
-  amountMinor: integer('amount_minor').notNull(),
-  currency: text('currency').notNull(),
-  nextDueAt: timestamp('next_due_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const scheduledExpenses = pgTable(
+  'scheduled_expenses',
+  {
+    id: text('id').primaryKey(),
+    spaceId: text('space_id')
+      .notNull()
+      .references(() => spaces.id),
+    name: text('name').notNull(),
+    amountMinor: integer('amount_minor').notNull(),
+    currency: text('currency').notNull(),
+    /** income | expense */
+    kind: text('kind').notNull().default('expense'),
+    /** 1..28 — salary/subscription day of month */
+    dayOfMonth: integer('day_of_month').notNull().default(1),
+    nextDueAt: timestamp('next_due_at', { withTimezone: true }),
+    active: boolean('active').notNull().default(true),
+    lastPostedAt: timestamp('last_posted_at', { withTimezone: true }),
+    notifyHoursBefore: integer('notify_hours_before').notNull().default(24),
+    createdBy: text('created_by').references(() => user.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('scheduled_expenses_space_active').on(t.spaceId, t.active),
+    index('scheduled_expenses_due').on(t.nextDueAt, t.active),
+  ],
+);
 
 export const comments = pgTable('comments', {
   id: text('id').primaryKey(),

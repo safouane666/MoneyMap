@@ -20,9 +20,16 @@ import {
   maxActiveGoalsForPlan,
   requiresConfirmation,
   filterVisibleEntries,
+  addMonthsToIsoDate,
+  monthlyTargetMinor,
+  evaluateGoalPace,
+  clampDayOfMonth,
+  computeNextDueAt,
+  type Goal,
   type PlanId,
   type SpaceRole,
   type LedgerTransaction,
+  type RecurringKind,
 } from '@clear-money/domain';
 import {
   user,
@@ -41,6 +48,7 @@ import {
   subscriptions,
   billingCustomers,
   pennyTurns,
+  postDueRecurring,
 } from '@clear-money/db';
 import { billingPublicConfig, config } from './config.js';
 import { getAuth } from './auth.js';
@@ -260,6 +268,7 @@ export function createApp() {
             'daily_mini_report',
             'weekly_review',
             'savings_goal',
+            'subscription_due',
             'gentle_inactivity',
           ],
           timezone: profile.timezone,
@@ -661,9 +670,26 @@ export function createApp() {
       name: string;
       targetMinor: number;
       currency: string;
-      targetDate: string;
+      targetDate?: string;
+      startDate?: string;
+      durationMonths?: number;
       plannedContributionMinor?: number;
     }>();
+    const durationMonths =
+      body.durationMonths !== undefined && body.durationMonths >= 1
+        ? Math.floor(body.durationMonths)
+        : 1;
+    const startDate = body.startDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+    const targetDate =
+      body.targetDate?.slice(0, 10) ?? addMonthsToIsoDate(startDate, durationMonths);
+    const plannedContributionMinor =
+      body.plannedContributionMinor !== undefined && body.plannedContributionMinor > 0
+        ? body.plannedContributionMinor
+        : monthlyTargetMinor({
+            targetMinor: body.targetMinor,
+            durationMonths,
+            plannedContributionMinor: 0,
+          });
     const id = createId('goal');
     await db().insert(goals).values({
       id,
@@ -672,8 +698,11 @@ export function createApp() {
       targetMinor: body.targetMinor,
       savedMinor: 0,
       currency: body.currency,
-      targetDate: body.targetDate,
-      plannedContributionMinor: body.plannedContributionMinor ?? 0,
+      startDate,
+      durationMonths,
+      targetDate,
+      plannedContributionMinor,
+      paceStatus: 'on_track',
       createdBy: userId,
     });
     const row = (await db().select().from(goals).where(eq(goals.id, id)).limit(1))[0]!;
@@ -719,7 +748,13 @@ export function createApp() {
     const scheduled = await db()
       .select()
       .from(scheduledExpenses)
-      .where(eq(scheduledExpenses.spaceId, spaceId));
+      .where(
+        and(
+          eq(scheduledExpenses.spaceId, spaceId),
+          eq(scheduledExpenses.active, true),
+          eq(scheduledExpenses.kind, 'expense'),
+        ),
+      );
     const scheduledMinor = scheduled.reduce((s, g) => s + g.amountMinor, 0);
     const hasRequiredInputs = totals.incomeMinor > 0 || txns.length > 0;
     return c.json(
@@ -733,6 +768,198 @@ export function createApp() {
         hasRequiredInputs,
       }),
     );
+  });
+
+  app.get('/spaces/:spaceId/recurring', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    await requireMembership(userId, spaceId);
+    const includeInactive = c.req.query('includeInactive') === '1';
+    const conditions = [eq(scheduledExpenses.spaceId, spaceId)];
+    if (!includeInactive) conditions.push(eq(scheduledExpenses.active, true));
+    const rows = await db()
+      .select()
+      .from(scheduledExpenses)
+      .where(and(...conditions))
+      .orderBy(desc(scheduledExpenses.createdAt));
+    return c.json(rows);
+  });
+
+  app.post('/spaces/:spaceId/recurring', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    await requirePermission(userId, spaceId, 'create');
+    const body = await c.req.json<{
+      name: string;
+      amountMinor: number;
+      currency?: string;
+      kind: RecurringKind;
+      dayOfMonth: number;
+      notifyHoursBefore?: number;
+    }>();
+
+    if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
+      return c.json({ error: 'name is required' }, 400);
+    }
+    if (!Number.isFinite(body.amountMinor) || body.amountMinor <= 0) {
+      return c.json({ error: 'amountMinor must be a positive integer' }, 400);
+    }
+    if (body.kind !== 'income' && body.kind !== 'expense') {
+      return c.json({ error: 'kind must be income or expense' }, 400);
+    }
+    if (!Number.isFinite(body.dayOfMonth) || body.dayOfMonth !== Math.trunc(body.dayOfMonth) || body.dayOfMonth < 1 || body.dayOfMonth > 28) {
+      return c.json({ error: 'dayOfMonth must be 1..28' }, 400);
+    }
+    const dayOfMonth = clampDayOfMonth(body.dayOfMonth);
+
+    const spaceRow = (
+      await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1)
+    )[0];
+    if (!spaceRow) return c.json({ error: 'Space not found' }, 404);
+    const currency = body.currency ?? spaceRow.currency;
+    if (currency !== spaceRow.currency) {
+      return c.json(
+        { error: `currency must match space currency (${spaceRow.currency})` },
+        400,
+      );
+    }
+
+    const id = createId('sched');
+    const nextDueAt = computeNextDueAt(dayOfMonth);
+    await db().insert(scheduledExpenses).values({
+      id,
+      spaceId,
+      name: body.name.trim(),
+      amountMinor: Math.trunc(body.amountMinor),
+      currency,
+      kind: body.kind,
+      dayOfMonth,
+      nextDueAt,
+      active: true,
+      notifyHoursBefore:
+        body.notifyHoursBefore !== undefined && Number.isFinite(body.notifyHoursBefore)
+          ? Math.max(0, Math.trunc(body.notifyHoursBefore))
+          : 24,
+      createdBy: userId,
+    });
+    const row = (
+      await db().select().from(scheduledExpenses).where(eq(scheduledExpenses.id, id)).limit(1)
+    )[0]!;
+    return c.json(row, 201);
+  });
+
+  /** Manual test: post due recurring items for this space now. */
+  app.post('/spaces/:spaceId/recurring/tick', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    await requirePermission(userId, spaceId, 'create');
+    const result = await postDueRecurring(db(), {
+      spaceId,
+      actorUserId: userId,
+      now: new Date(),
+    });
+    return c.json(result);
+  });
+
+  app.patch('/spaces/:spaceId/recurring/:id', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    const id = c.req.param('id');
+    const row = (
+      await db()
+        .select()
+        .from(scheduledExpenses)
+        .where(and(eq(scheduledExpenses.id, id), eq(scheduledExpenses.spaceId, spaceId)))
+        .limit(1)
+    )[0];
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.createdBy === userId) await requirePermission(userId, spaceId, 'edit_own');
+    else await requirePermission(userId, spaceId, 'edit_all');
+
+    const body = await c.req.json<{
+      name?: string;
+      amountMinor?: number;
+      kind?: RecurringKind;
+      dayOfMonth?: number;
+      active?: boolean;
+      notifyHoursBefore?: number;
+    }>();
+
+    const patch: Partial<typeof scheduledExpenses.$inferInsert> = {};
+    if (body.name !== undefined) {
+      if (!body.name.trim()) return c.json({ error: 'name is required' }, 400);
+      patch.name = body.name.trim();
+    }
+    if (body.amountMinor !== undefined) {
+      if (!Number.isFinite(body.amountMinor) || body.amountMinor <= 0) {
+        return c.json({ error: 'amountMinor must be a positive integer' }, 400);
+      }
+      patch.amountMinor = Math.trunc(body.amountMinor);
+    }
+    if (body.kind !== undefined) {
+      if (body.kind !== 'income' && body.kind !== 'expense') {
+        return c.json({ error: 'kind must be income or expense' }, 400);
+      }
+      patch.kind = body.kind;
+    }
+    if (body.dayOfMonth !== undefined) {
+      if (
+        !Number.isFinite(body.dayOfMonth) ||
+        body.dayOfMonth < 1 ||
+        body.dayOfMonth > 28 ||
+        body.dayOfMonth !== Math.trunc(body.dayOfMonth)
+      ) {
+        return c.json({ error: 'dayOfMonth must be 1..28' }, 400);
+      }
+      const dayOfMonth = clampDayOfMonth(body.dayOfMonth);
+      patch.dayOfMonth = dayOfMonth;
+      patch.nextDueAt = computeNextDueAt(dayOfMonth);
+    }
+    if (body.active !== undefined) patch.active = Boolean(body.active);
+    if (body.notifyHoursBefore !== undefined) {
+      if (!Number.isFinite(body.notifyHoursBefore) || body.notifyHoursBefore < 0) {
+        return c.json({ error: 'notifyHoursBefore must be >= 0' }, 400);
+      }
+      patch.notifyHoursBefore = Math.trunc(body.notifyHoursBefore);
+    }
+
+    await db()
+      .update(scheduledExpenses)
+      .set(patch)
+      .where(and(eq(scheduledExpenses.id, id), eq(scheduledExpenses.spaceId, spaceId)));
+    const updated = (
+      await db().select().from(scheduledExpenses).where(eq(scheduledExpenses.id, id)).limit(1)
+    )[0];
+    return c.json(updated);
+  });
+
+  app.delete('/spaces/:spaceId/recurring/:id', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    const id = c.req.param('id');
+    const hard = c.req.query('hard') === '1';
+    const row = (
+      await db()
+        .select()
+        .from(scheduledExpenses)
+        .where(and(eq(scheduledExpenses.id, id), eq(scheduledExpenses.spaceId, spaceId)))
+        .limit(1)
+    )[0];
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.createdBy === userId) await requirePermission(userId, spaceId, 'delete_own');
+    else await requirePermission(userId, spaceId, 'delete_all');
+
+    if (hard) {
+      await db()
+        .delete(scheduledExpenses)
+        .where(and(eq(scheduledExpenses.id, id), eq(scheduledExpenses.spaceId, spaceId)));
+    } else {
+      await db()
+        .update(scheduledExpenses)
+        .set({ active: false })
+        .where(and(eq(scheduledExpenses.id, id), eq(scheduledExpenses.spaceId, spaceId)));
+    }
+    return c.json({ ok: true });
   });
 
   app.post('/spaces/:spaceId/members/invite', async (c) => {
@@ -1096,7 +1323,15 @@ export function createApp() {
       plannedContributionMinor?: number;
       status?: string;
       notificationPolicy?: string;
+      startDate?: string;
+      durationMonths?: number;
+      targetDate?: string;
+      paceStatus?: string;
     }>();
+    const durationMonths =
+      body.durationMonths !== undefined && body.durationMonths >= 1
+        ? Math.floor(body.durationMonths)
+        : undefined;
     await db()
       .update(goals)
       .set({
@@ -1110,10 +1345,53 @@ export function createApp() {
         ...(body.notificationPolicy !== undefined
           ? { notificationPolicy: body.notificationPolicy }
           : {}),
+        ...(body.startDate !== undefined ? { startDate: body.startDate.slice(0, 10) } : {}),
+        ...(durationMonths !== undefined ? { durationMonths } : {}),
+        ...(body.targetDate !== undefined ? { targetDate: body.targetDate.slice(0, 10) } : {}),
+        ...(body.paceStatus !== undefined ? { paceStatus: body.paceStatus } : {}),
       })
       .where(and(eq(goals.id, goalId), eq(goals.spaceId, spaceId)));
     const row = (await db().select().from(goals).where(eq(goals.id, goalId)).limit(1))[0];
     return c.json(row);
+  });
+
+  app.post('/spaces/:spaceId/goals/:goalId/evaluate', async (c) => {
+    const userId = c.get('userId');
+    const spaceId = c.req.param('spaceId');
+    const goalId = c.req.param('goalId');
+    await requirePermission(userId, spaceId, 'edit_own');
+    const row = (
+      await db()
+        .select()
+        .from(goals)
+        .where(and(eq(goals.id, goalId), eq(goals.spaceId, spaceId), isNull(goals.deletedAt)))
+        .limit(1)
+    )[0];
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    const body = (await c.req.json().catch(() => ({}))) as { asOfDate?: string };
+    const asOfDate = body.asOfDate?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+    const domainGoal: Goal = {
+      id: row.id,
+      spaceId: row.spaceId,
+      name: row.name,
+      targetMinor: row.targetMinor,
+      savedMinor: row.savedMinor,
+      currency: row.currency,
+      targetDate: row.targetDate,
+      startDate: row.startDate ?? undefined,
+      durationMonths: row.durationMonths ?? 1,
+      plannedContributionMinor: row.plannedContributionMinor,
+      notificationPolicy: row.notificationPolicy as Goal['notificationPolicy'],
+      status: row.status as Goal['status'],
+      paceStatus: (row.paceStatus as Goal['paceStatus']) ?? 'on_track',
+    };
+    const evaluation = evaluateGoalPace(domainGoal, asOfDate);
+    await db()
+      .update(goals)
+      .set({ paceStatus: evaluation.paceStatus })
+      .where(and(eq(goals.id, goalId), eq(goals.spaceId, spaceId)));
+    const updated = (await db().select().from(goals).where(eq(goals.id, goalId)).limit(1))[0]!;
+    return c.json({ goal: updated, evaluation });
   });
 
   app.delete('/spaces/:spaceId/goals/:goalId', async (c) => {

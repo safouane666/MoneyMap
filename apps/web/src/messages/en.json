@@ -172,6 +172,35 @@
     "timeEmpty": "Not enough data yet for time patterns.",
     "timeReady": "{count} confirmed entries in {space}. Patterns refine as you add more."
   },
+  "recurring": {
+    "salaryTitle": "Salary & income",
+    "subscriptionsTitle": "Subscriptions",
+    "salaryEmpty": "No recurring income yet.",
+    "subscriptionsEmpty": "No subscriptions yet.",
+    "addSalary": "Add income",
+    "addSubscription": "Add subscription",
+    "editSalary": "Edit income",
+    "editSubscription": "Edit subscription",
+    "name": "Name",
+    "amount": "Amount",
+    "dayOfMonth": "Day of month",
+    "dayHint": "Use 1–28 so every month has this day.",
+    "dayLabel": "Day {day}",
+    "nextDue": "Next",
+    "dueSoon": "Due within 24h",
+    "dueSoonToast": "Due soon: {names}",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveFailed": "Could not save",
+    "invalidAmount": "Enter a valid amount",
+    "invalidDay": "Day must be between 1 and 28",
+    "invalidName": "Name is required",
+    "needLogin": "Sign in to add salary and subscriptions.",
+    "edit": "Edit",
+    "remove": "Remove",
+    "removed": "Removed",
+    "removeFailed": "Could not remove"
+  },
   "goals": {
     "title": "Goals",
     "progress": "Progress",
@@ -193,7 +222,24 @@
     "needLogin": "Sign in to create and sync goals.",
     "freeCap": "Free plan: up to 3 active goals. Upgrade for more.",
     "lockedTitle": "Goal limit reached",
-    "lockedBody": "Free includes 3 goals. Try Plus locally to unlock more."
+    "lockedBody": "Free includes 3 goals. Try Plus locally to unlock more.",
+    "duration": "Duration",
+    "durationMonths": "{count} months",
+    "durationLabel": "Duration (months)",
+    "startDate": "Start date",
+    "startDateHint": "Defaults to today if empty",
+    "invalidDuration": "Enter at least 1 month",
+    "monthlyTarget": "Monthly target",
+    "timeline": "Timeline",
+    "expectedVsSaved": "Expected / saved",
+    "pace": {
+      "ahead": "Ahead",
+      "on_track": "On track",
+      "tight": "Tight",
+      "behind": "Behind",
+      "won": "Won",
+      "lost": "Lost"
+    }
   },
   "spaces": {
     "title": "Spaces",
@@ -352,5 +398,15 @@
     "goalAlmost": "{amount} helps — “{goal}” is ~{pct}% complete. Almost!",
     "goalHit": "{amount} did it — “{goal}” looks complete. Go you."
   },
-  "empty": "Nothing here yet"
+  "empty": "Nothing here yet",
+  "notif": {
+    "savings_goal": {
+      "title": "Savings goal needs attention",
+      "body": "You're tight or behind on a goal — open Goals to adjust your plan."
+    },
+    "subscription_due": {
+      "title": "Subscription renewing soon",
+      "body": "A recurring charge is due within the next day — check Home."
+    }
+  }
 }

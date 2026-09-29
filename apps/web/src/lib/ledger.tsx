@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  addMonthsToIsoDate,
   createId,
   type Goal,
   type LedgerTransaction,
@@ -33,7 +34,10 @@ import {
   updateDemoTransaction,
   type DemoCategory,
   type DemoState,
+  type RecurringItem,
 } from '@/lib/demo-state';
+
+export type { RecurringItem };
 
 interface LedgerContextValue {
   state: DemoState;
@@ -58,9 +62,11 @@ interface LedgerContextValue {
     name: string;
     targetMinor: number;
     currency: string;
-    targetDate?: string;
+    durationMonths: number;
+    startDate?: string;
     plannedContributionMinor?: number;
   }) => Promise<Goal>;
+  evaluateGoal: (id: string, asOfDate?: string) => Promise<Goal | null>;
   updateGoal: (
     id: string,
     patch: {
@@ -72,6 +78,23 @@ interface LedgerContextValue {
     },
   ) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
+  createRecurring: (input: {
+    name: string;
+    amountMinor: number;
+    kind: 'income' | 'expense';
+    dayOfMonth: number;
+  }) => Promise<RecurringItem>;
+  updateRecurring: (
+    id: string,
+    patch: {
+      name?: string;
+      amountMinor?: number;
+      kind?: 'income' | 'expense';
+      dayOfMonth?: number;
+      active?: boolean;
+    },
+  ) => Promise<void>;
+  deleteRecurring: (id: string) => Promise<void>;
   addTransaction: (
     input: Omit<LedgerTransaction, 'id' | 'createdAt' | 'createdBy' | 'status' | 'source'> & {
       source?: LedgerTransaction['source'];
@@ -104,6 +127,7 @@ const EMPTY: DemoState = {
   categories: [],
   transactions: [],
   goals: [],
+  recurring: [],
   hiddenIds: [],
 };
 
@@ -140,6 +164,12 @@ type ApiTxn = {
 };
 
 type ApiGoal = Goal & { createdBy?: string; createdAt?: string; deletedAt?: string | null };
+
+type ApiRecurring = RecurringItem & {
+  createdAt?: string;
+  updatedAt?: string;
+  deletedAt?: string | null;
+};
 
 type ApiMe = {
   id: string;
@@ -185,7 +215,27 @@ function mapTxn(row: ApiTxn): LedgerTransaction {
   };
 }
 
+function mapRecurring(row: ApiRecurring): RecurringItem {
+  return {
+    id: row.id,
+    spaceId: row.spaceId,
+    name: row.name,
+    amountMinor: row.amountMinor,
+    currency: row.currency,
+    kind: row.kind,
+    dayOfMonth: row.dayOfMonth,
+    nextDueAt: row.nextDueAt,
+    active: row.active,
+    notifyHoursBefore: row.notifyHoursBefore ?? 0,
+  };
+}
+
 function mapGoal(row: ApiGoal): Goal {
+  const durationMonths =
+    row.durationMonths !== undefined && row.durationMonths >= 1
+      ? Math.floor(row.durationMonths)
+      : undefined;
+  const plannedContributionMinor = row.plannedContributionMinor ?? 0;
   return {
     id: row.id,
     spaceId: row.spaceId,
@@ -194,7 +244,10 @@ function mapGoal(row: ApiGoal): Goal {
     savedMinor: row.savedMinor,
     currency: row.currency,
     targetDate: row.targetDate,
-    plannedContributionMinor: row.plannedContributionMinor,
+    startDate: row.startDate ?? undefined,
+    durationMonths,
+    plannedContributionMinor,
+    paceStatus: row.paceStatus,
     notificationPolicy: row.notificationPolicy,
     status: row.status,
   };
@@ -274,6 +327,7 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
         categories: [],
         transactions: [],
         goals: [],
+        recurring: [],
         hiddenIds: readHiddenIds(),
       },
     };
@@ -304,6 +358,7 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
         categories: [],
         transactions: [],
         goals: [],
+        recurring: [],
         hiddenIds: readHiddenIds(),
       },
     };
@@ -316,25 +371,30 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
   const [categoriesResult, ...spacePayloads] = await Promise.all([
     apiFetch<ApiCategory[]>('/categories'),
     ...spaces.map(async (space) => {
-      const [txns, goals] = await Promise.all([
+      const [txns, goals, recurring] = await Promise.all([
         apiFetch<ApiTxn[]>(`/spaces/${space.id}/transactions`),
         apiFetch<ApiGoal[]>(`/spaces/${space.id}/goals`),
+        apiFetch<ApiRecurring[]>(`/spaces/${space.id}/recurring`),
       ]);
-      return { spaceId: space.id, txns, goals };
+      return { spaceId: space.id, txns, goals, recurring };
     }),
   ]);
 
   const transactions: LedgerTransaction[] = [];
   const goals: Goal[] = [];
+  const recurring: RecurringItem[] = [];
   if (!categoriesResult.offline) {
     for (const payload of spacePayloads) {
-      if (payload.txns.offline || payload.goals.offline) continue;
+      if (payload.txns.offline || payload.goals.offline || payload.recurring.offline) continue;
       for (const row of payload.txns.data ?? []) {
         if (row.type === 'transfer') continue;
         transactions.push(mapTxn(row));
       }
       for (const row of payload.goals.data ?? []) {
         goals.push(mapGoal(row));
+      }
+      for (const row of payload.recurring.data ?? []) {
+        recurring.push(mapRecurring(row));
       }
     }
   }
@@ -358,6 +418,7 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
       categories,
       transactions,
       goals,
+      recurring,
       hiddenIds: readHiddenIds(),
     },
   };
@@ -877,47 +938,63 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       name: string;
       targetMinor: number;
       currency: string;
-      targetDate?: string;
+      durationMonths: number;
+      startDate?: string;
       plannedContributionMinor?: number;
     }) => {
       if (offlineRef.current) throw new ApiError('Sign in to create goals', 401);
       const spaceId = stateRef.current.activeSpaceId;
-      const targetDate =
-        input.targetDate ??
-        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const result = await apiFetch<Goal & { id: string }>(`/spaces/${spaceId}/goals`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: input.name.trim(),
-          targetMinor: input.targetMinor,
-          currency: input.currency,
-          targetDate,
-          plannedContributionMinor: input.plannedContributionMinor ?? 0,
-        }),
-      });
-      if (result.offline || !result.data) throw new ApiError('API is offline', 503);
-      const created: Goal = {
-        id: result.data.id,
-        spaceId,
+      const durationMonths =
+        Number.isFinite(input.durationMonths) && input.durationMonths >= 1
+          ? Math.floor(input.durationMonths)
+          : 1;
+      const startDate = (input.startDate ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const targetDate = addMonthsToIsoDate(startDate, durationMonths);
+      const body: Record<string, unknown> = {
         name: input.name.trim(),
         targetMinor: input.targetMinor,
-        savedMinor: 0,
         currency: input.currency,
+        startDate,
+        durationMonths,
         targetDate,
-        plannedContributionMinor: input.plannedContributionMinor ?? 0,
-        notificationPolicy: 'weekly',
-        status: 'active',
       };
-      const serverGoal = mapGoal({
-        ...created,
-        ...result.data,
-        spaceId,
-      } as ApiGoal);
+      if (input.plannedContributionMinor !== undefined && input.plannedContributionMinor > 0) {
+        body.plannedContributionMinor = input.plannedContributionMinor;
+      }
+      const result = await apiFetch<ApiGoal>(`/spaces/${spaceId}/goals`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      if (result.offline || !result.data) throw new ApiError('API is offline', 503);
+      const serverGoal = mapGoal({ ...result.data, spaceId });
       commit({
         ...stateRef.current,
         goals: [...stateRef.current.goals.filter((g) => g.id !== serverGoal.id), serverGoal],
       });
       return serverGoal;
+    },
+    [commit],
+  );
+
+  const evaluateGoal = useCallback(
+    async (id: string, asOfDate?: string) => {
+      if (offlineRef.current) return null;
+      const existing = stateRef.current.goals.find((g) => g.id === id);
+      if (!existing) return null;
+      const result = await apiFetch<{ goal: ApiGoal }>(
+        `/spaces/${existing.spaceId}/goals/${id}/evaluate`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ asOfDate: asOfDate?.slice(0, 10) }),
+        },
+      );
+      if (result.offline || !result.data?.goal) return null;
+      const saved = mapGoal(result.data.goal);
+      commit({
+        ...stateRef.current,
+        goals: stateRef.current.goals.map((g) => (g.id === id ? saved : g)),
+      });
+      return saved;
     },
     [commit],
   );
@@ -953,11 +1030,24 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(patch),
       });
       if (result.offline || !result.data) return;
-      const saved = mapGoal(result.data);
+      let saved = mapGoal(result.data);
       commit({
         ...stateRef.current,
         goals: stateRef.current.goals.map((g) => (g.id === id ? saved : g)),
       });
+      if (patch.savedMinor !== undefined) {
+        const evalResult = await apiFetch<{ goal: ApiGoal }>(
+          `/spaces/${existing.spaceId}/goals/${id}/evaluate`,
+          { method: 'POST', body: JSON.stringify({}) },
+        );
+        if (!evalResult.offline && evalResult.data?.goal) {
+          saved = mapGoal(evalResult.data.goal);
+          commit({
+            ...stateRef.current,
+            goals: stateRef.current.goals.map((g) => (g.id === id ? saved : g)),
+          });
+        }
+      }
     },
     [commit],
   );
@@ -978,6 +1068,91 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const createRecurring = useCallback(
+    async (input: {
+      name: string;
+      amountMinor: number;
+      kind: 'income' | 'expense';
+      dayOfMonth: number;
+    }) => {
+      if (offlineRef.current) throw new ApiError('Sign in to manage recurring items', 401);
+      const spaceId = stateRef.current.activeSpaceId;
+      const space = stateRef.current.spaces.find((s) => s.id === spaceId);
+      if (!space) throw new ApiError('Space not found', 404);
+      const result = await apiFetch<ApiRecurring>(`/spaces/${spaceId}/recurring`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: input.name.trim(),
+          amountMinor: input.amountMinor,
+          kind: input.kind,
+          dayOfMonth: input.dayOfMonth,
+          currency: space.currency,
+        }),
+      });
+      if (result.offline || !result.data) throw new ApiError('API is offline', 503);
+      const created = mapRecurring(result.data);
+      commit({
+        ...stateRef.current,
+        recurring: [...stateRef.current.recurring.filter((r) => r.id !== created.id), created],
+      });
+      return created;
+    },
+    [commit],
+  );
+
+  const updateRecurring = useCallback(
+    async (
+      id: string,
+      patch: {
+        name?: string;
+        amountMinor?: number;
+        kind?: 'income' | 'expense';
+        dayOfMonth?: number;
+        active?: boolean;
+      },
+    ) => {
+      if (offlineRef.current) throw new ApiError('Sign in to manage recurring items', 401);
+      const existing = stateRef.current.recurring.find((r) => r.id === id);
+      if (!existing) throw new ApiError('Not found', 404);
+      commit({
+        ...stateRef.current,
+        recurring: stateRef.current.recurring.map((r) =>
+          r.id === id ? { ...r, ...patch } : r,
+        ),
+      });
+      const result = await apiFetch<ApiRecurring>(
+        `/spaces/${existing.spaceId}/recurring/${id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        },
+      );
+      if (result.offline || !result.data) return;
+      const saved = mapRecurring(result.data);
+      commit({
+        ...stateRef.current,
+        recurring: stateRef.current.recurring.map((r) => (r.id === id ? saved : r)),
+      });
+    },
+    [commit],
+  );
+
+  const deleteRecurring = useCallback(
+    async (id: string) => {
+      if (offlineRef.current) throw new ApiError('Sign in to manage recurring items', 401);
+      const existing = stateRef.current.recurring.find((r) => r.id === id);
+      if (!existing) return;
+      commit({
+        ...stateRef.current,
+        recurring: stateRef.current.recurring.filter((r) => r.id !== id),
+      });
+      await apiFetch(`/spaces/${existing.spaceId}/recurring/${id}`, {
+        method: 'DELETE',
+      }).catch(() => undefined);
+    },
+    [commit],
+  );
+
   const value = useMemo(
     () => ({
       state,
@@ -992,8 +1167,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       createSpace,
       updateSpace,
       createGoal,
+      evaluateGoal,
       updateGoal,
       deleteGoal,
+      createRecurring,
+      updateRecurring,
+      deleteRecurring,
       addTransaction,
       updateTransaction,
       undoTransaction,
@@ -1014,8 +1193,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       createSpace,
       updateSpace,
       createGoal,
+      evaluateGoal,
       updateGoal,
       deleteGoal,
+      createRecurring,
+      updateRecurring,
+      deleteRecurring,
       addTransaction,
       updateTransaction,
       undoTransaction,

@@ -10,6 +10,10 @@ import {
   highestSpendingWeekday,
   lateEntryInsight,
   computeSafeToSpend,
+  monthlyTargetMinor,
+  expectedSavedByDate,
+  evaluateGoalPace,
+  addMonthsToIsoDate,
   can,
   filterVisibleEntries,
   planHasFeature,
@@ -19,11 +23,37 @@ import {
   defaultLimitsForPlan,
   planNotifications,
   formatNotificationPreview,
+  buildEngagementFacts,
   directionForLocale,
   requiresConfirmation,
+  clampDayOfMonth,
+  computeNextDueAt,
+  advanceNextDueAt,
+  wasPostedThisCalendarMonth,
+  recurringIdempotencyKey,
+  type Goal,
   type LedgerTransaction,
   type EntitlementContext,
 } from './index.js';
+
+function goal(partial: Partial<Goal> = {}): Goal {
+  return {
+    id: 'goal_1',
+    spaceId: 'space_1',
+    name: 'Gaming PC',
+    targetMinor: 200_000,
+    savedMinor: 0,
+    currency: 'USD',
+    startDate: '2026-01-15',
+    durationMonths: 3,
+    targetDate: '2026-04-15',
+    plannedContributionMinor: 0,
+    notificationPolicy: 'weekly',
+    status: 'active',
+    paceStatus: 'on_track',
+    ...partial,
+  };
+}
 
 function txn(partial: Partial<LedgerTransaction> & Pick<LedgerTransaction, 'type' | 'amountMinor'>): LedgerTransaction {
   return {
@@ -170,6 +200,90 @@ describe('goals / safe-to-spend', () => {
     });
     expect(result.message).toBe('Not enough data to estimate');
     expect(result.estimateMinor).toBeNull();
+  });
+
+  it('splits target into monthly ceil unless planned contribution is set', () => {
+    expect(monthlyTargetMinor(goal({ targetMinor: 200_000, durationMonths: 3 }))).toBe(
+      Math.ceil(200_000 / 3),
+    );
+    expect(
+      monthlyTargetMinor(goal({ targetMinor: 200_000, durationMonths: 3, plannedContributionMinor: 50_000 })),
+    ).toBe(50_000);
+  });
+
+  it('adds months to ISO dates and clamps day overflow', () => {
+    expect(addMonthsToIsoDate('2026-01-15', 3)).toBe('2026-04-15');
+    expect(addMonthsToIsoDate('2026-01-31', 1)).toBe('2026-02-28');
+  });
+
+  it('expects cumulative savings by months elapsed', () => {
+    const g = goal({ targetMinor: 300_000, durationMonths: 3, plannedContributionMinor: 0 });
+    const monthly = Math.ceil(300_000 / 3);
+    expect(expectedSavedByDate(g, '2026-01-15')).toBe(0);
+    expect(expectedSavedByDate(g, '2026-02-15')).toBe(monthly);
+    expect(expectedSavedByDate(g, '2026-03-15')).toBe(monthly * 2);
+    expect(expectedSavedByDate(g, '2026-04-15')).toBe(Math.min(300_000, monthly * 3));
+  });
+
+  it('classifies pace ahead / on_track / tight / behind', () => {
+    const monthly = Math.ceil(300_000 / 3);
+    const base = goal({ targetMinor: 300_000, durationMonths: 3, plannedContributionMinor: 0 });
+    // After 1 month, expected = monthly
+    expect(evaluateGoalPace({ ...base, savedMinor: Math.floor(monthly * 1.06) }, '2026-02-15').paceStatus).toBe(
+      'ahead',
+    );
+    expect(evaluateGoalPace({ ...base, savedMinor: monthly }, '2026-02-15').paceStatus).toBe('on_track');
+    expect(
+      evaluateGoalPace({ ...base, savedMinor: Math.ceil(monthly * 0.85) }, '2026-02-15').paceStatus,
+    ).toBe('tight');
+    expect(evaluateGoalPace({ ...base, savedMinor: Math.floor(monthly * 0.84) }, '2026-02-15').paceStatus).toBe(
+      'behind',
+    );
+  });
+
+  it('marks won when target met and lost after end if short', () => {
+    const g = goal({ targetMinor: 100_000, durationMonths: 2, targetDate: '2026-03-15' });
+    expect(evaluateGoalPace({ ...g, savedMinor: 100_000 }, '2026-02-01').paceStatus).toBe('won');
+    expect(evaluateGoalPace({ ...g, savedMinor: 50_000 }, '2026-03-15').paceStatus).toBe('lost');
+    expect(evaluateGoalPace({ ...g, savedMinor: 50_000 }, '2026-03-16').paceStatus).toBe('lost');
+  });
+});
+
+describe('recurring', () => {
+  it('clamps day of month to 1..28', () => {
+    expect(clampDayOfMonth(0)).toBe(1);
+    expect(clampDayOfMonth(31)).toBe(28);
+    expect(clampDayOfMonth(15.9)).toBe(15);
+  });
+
+  it('computes next due at today or future day this month', () => {
+    const from = new Date(Date.UTC(2026, 8, 10, 8, 0, 0)); // Sep 10
+    const due = computeNextDueAt(15, from);
+    expect(due.toISOString()).toBe('2026-09-15T12:00:00.000Z');
+  });
+
+  it('rolls next due to next month when day already passed', () => {
+    const from = new Date(Date.UTC(2026, 8, 20, 8, 0, 0)); // Sep 20
+    const due = computeNextDueAt(15, from);
+    expect(due.toISOString()).toBe('2026-10-15T12:00:00.000Z');
+  });
+
+  it('advances due by one month', () => {
+    const due = new Date('2026-09-15T12:00:00.000Z');
+    expect(advanceNextDueAt(due, 15).toISOString()).toBe('2026-10-15T12:00:00.000Z');
+  });
+
+  it('detects same calendar month posts', () => {
+    const now = new Date('2026-09-28T10:00:00.000Z');
+    expect(wasPostedThisCalendarMonth(new Date('2026-09-01T00:00:00.000Z'), now)).toBe(true);
+    expect(wasPostedThisCalendarMonth(new Date('2026-08-31T23:00:00.000Z'), now)).toBe(false);
+    expect(wasPostedThisCalendarMonth(null, now)).toBe(false);
+  });
+
+  it('builds recurring idempotency keys', () => {
+    expect(recurringIdempotencyKey('sched_1', new Date('2026-09-05T00:00:00.000Z'))).toBe(
+      'recurring:sched_1:2026-09',
+    );
   });
 });
 
@@ -335,10 +449,91 @@ describe('notification planner', () => {
     expect(diff.schedule).toHaveLength(0);
   });
 
+  it('schedules savings_goal only when pace is tight or behind', () => {
+    const prefs = {
+      ...basePrefs,
+      maxDaily: 5,
+      categories: [...basePrefs.categories, 'savings_goal'] as const,
+    };
+    const onTrack = planNotifications({
+      preferences: prefs,
+      snapshot: { ...snapshot, facts: { ...snapshot.facts, goalPace: 'on_track' } },
+      existingFingerprints: [],
+      nowIso: '2026-09-24T10:00:00Z',
+      localHour: 10,
+    });
+    expect(onTrack.schedule.some((s) => s.type === 'savings_goal')).toBe(false);
+
+    const tight = planNotifications({
+      preferences: prefs,
+      snapshot: { ...snapshot, facts: { ...snapshot.facts, goalPace: 'tight' } },
+      existingFingerprints: [],
+      nowIso: '2026-09-24T10:00:00Z',
+      localHour: 10,
+    });
+    expect(tight.schedule.some((s) => s.type === 'savings_goal')).toBe(true);
+  });
+
+  it('schedules subscription_due when due soon or within notify window', () => {
+    const prefs = {
+      ...basePrefs,
+      maxDaily: 5,
+      categories: [...basePrefs.categories, 'subscription_due'] as const,
+    };
+    const far = planNotifications({
+      preferences: prefs,
+      snapshot: {
+        ...snapshot,
+        facts: { ...snapshot.facts, hoursUntilSubscriptionDue: 72 },
+      },
+      existingFingerprints: [],
+      nowIso: '2026-09-24T10:00:00Z',
+      localHour: 10,
+    });
+    expect(far.schedule.some((s) => s.type === 'subscription_due')).toBe(false);
+
+    const soon = planNotifications({
+      preferences: prefs,
+      snapshot: {
+        ...snapshot,
+        facts: { ...snapshot.facts, hoursUntilSubscriptionDue: 12 },
+      },
+      existingFingerprints: [],
+      nowIso: '2026-09-24T10:00:00Z',
+      localHour: 10,
+    });
+    expect(soon.schedule.some((s) => s.type === 'subscription_due')).toBe(true);
+    expect(soon.schedule.find((s) => s.type === 'subscription_due')?.destination).toBe(
+      '/app/home',
+    );
+  });
+
   it('formats privacy previews', () => {
     expect(formatNotificationPreview('generic', 'Spent 42', 'Summary')).toBe(
       'Your Clear Money update is ready.',
     );
+  });
+
+  it('builds engagement facts from goal pace and recurring due', () => {
+    const now = new Date('2026-09-24T10:00:00Z');
+    const facts = buildEngagementFacts({
+      now,
+      goals: [
+        { status: 'active', paceStatus: 'on_track', notificationPolicy: 'weekly' },
+        { status: 'active', paceStatus: 'behind', notificationPolicy: 'on_progress' },
+      ],
+      recurring: [
+        {
+          active: true,
+          nextDueAt: '2026-09-25T09:00:00Z',
+          notifyHoursBefore: 24,
+        },
+      ],
+    });
+    expect(facts.goalPace).toBe('behind');
+    expect(facts.goalTight).toBe(1);
+    expect(facts.subscriptionDueSoon).toBe(1);
+    expect(facts.hoursUntilSubscriptionDue).toBeGreaterThan(0);
   });
 });
 

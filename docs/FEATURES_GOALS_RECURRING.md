@@ -14,17 +14,11 @@ Agent-executable add-on before VPS deploy. Do **not** block deploy scaffolding o
 - Penny can plan and create goals (AI tools).
 - Notifications when pace is **tight** or **behind** (`notificationPolicy` + planner category `savings_goal`).
 
-**Checklist**
-- [x] Domain: `Goal` duration fields + `monthlyTargetMinor` / `expectedSavedByDate` / `evaluateGoalPace` (unit-tested)
-- [x] DB: `start_date`, `duration_months`, `pace_status` migration + schema
-- [x] API: POST/PATCH/GET goals accept duration fields; optional `POST .../goals/:id/evaluate`
-- [ ] Create goal UI collects duration; shows monthly amount and colored progress
-- [ ] Penny tool `create_goal` / `plan_goal` available
-
 **Done when**
-- Create goal UI collects duration; shows monthly amount and colored progress.
-- Domain helpers unit-tested for monthly expected and final win/lose.
-- Penny tool `create_goal` / `plan_goal` available.
+- [x] Create goal UI collects duration; shows monthly amount and colored progress.
+- [x] Domain helpers unit-tested for monthly expected and final win/lose.
+- [x] Penny tool `create_goal` / `plan_goal` available.
+- [x] Worker periodically evaluates active goals (`evaluateActiveGoals`).
 
 ## F2 — Home salary & subscriptions (recurring)
 
@@ -35,15 +29,19 @@ Agent-executable add-on before VPS deploy. Do **not** block deploy scaffolding o
 - Device/local or in-app toast: remind **24h before** due (notification planner fact `subscription_due`).
 
 **Done when**
-- API CRUD under `/spaces/:id/recurring` (or scheduled expenses extended).
-- Worker posts due items idempotently.
-- Home UI manage sheet works signed-in.
+- [x] API CRUD under `/spaces/:id/recurring` (scheduled_expenses extended: kind, day_of_month, active, last_posted_at, notify_hours_before, created_by).
+- [x] Worker `post_due_recurring` posts due items idempotently (same UTC calendar month skipped); poll sweep + job type; `POST .../recurring/tick` for manual test.
+- [x] Home UI manage sheet works signed-in.
+- [x] 24h-before toast on Home + planner category `subscription_due`.
 
 ## F3 — Activity month/year + export
 
 **Product**
 - Activity filters by month + year.
 - Export CSV of the **filtered** list.
+
+**Done when**
+- [x] MonthYearFilter on Activity + ExportDialog uses filtered rows.
 
 ## F4 — Reports saves + filters + export
 
@@ -52,15 +50,10 @@ Agent-executable add-on before VPS deploy. Do **not** block deploy scaffolding o
 - Filter by this month / last month / custom month-year / optional custom range.
 - Export respects active filters.
 
+**Done when**
+- [x] Saves card + PeriodSelector / pick-month + filtered export.
+
 ---
 
-## Checklist
-
-- [ ] F1 domain + API (duration, monthly split, pace evaluate)
-- [ ] F1 web goals UI + colored progress + Penny tools
-- [x] F3 Activity month/year filter + filtered export
-- [x] F4 Reports overall saves + month pick + filtered export
-- [ ] F2 recurring schema + API + worker tick
-- [ ] F2 Home salary/subscriptions UI + 24h reminder hooks
-
 After F1–F4, resume VPS deploy testing (`docs/DEPLOY_VPS.md`).
+Apply migration `packages/db/drizzle/0002_goals_recurring.sql` before deploy.

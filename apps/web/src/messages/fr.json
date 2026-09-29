@@ -172,6 +172,35 @@
     "timeEmpty": "Pas assez de données pour les tendances temporelles.",
     "timeReady": "{count} entrées confirmées dans {space}. Les tendances s'affinent avec le temps."
   },
+  "recurring": {
+    "salaryTitle": "Salaire et revenus",
+    "subscriptionsTitle": "Abonnements",
+    "salaryEmpty": "Aucun revenu récurrent.",
+    "subscriptionsEmpty": "Aucun abonnement.",
+    "addSalary": "Ajouter un revenu",
+    "addSubscription": "Ajouter un abonnement",
+    "editSalary": "Modifier le revenu",
+    "editSubscription": "Modifier l'abonnement",
+    "name": "Nom",
+    "amount": "Montant",
+    "dayOfMonth": "Jour du mois",
+    "dayHint": "Utilisez 1–28 pour que chaque mois ait ce jour.",
+    "dayLabel": "Jour {day}",
+    "nextDue": "Prochain",
+    "dueSoon": "Dû sous 24 h",
+    "dueSoonToast": "Bientôt dû : {names}",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "saveFailed": "Enregistrement impossible",
+    "invalidAmount": "Montant invalide",
+    "invalidDay": "Le jour doit être entre 1 et 28",
+    "invalidName": "Le nom est requis",
+    "needLogin": "Connectez-vous pour gérer salaire et abonnements.",
+    "edit": "Modifier",
+    "remove": "Supprimer",
+    "removed": "Supprimé",
+    "removeFailed": "Suppression impossible"
+  },
   "goals": {
     "title": "Objectifs",
     "progress": "Progression",
@@ -193,7 +222,24 @@
     "needLogin": "Connectez-vous pour créer des objectifs.",
     "freeCap": "Gratuit : 3 objectifs actifs. Passez à Plus pour plus.",
     "lockedTitle": "Limite atteinte",
-    "lockedBody": "Le gratuit inclut 3 objectifs. Essayez Plus en local."
+    "lockedBody": "Le gratuit inclut 3 objectifs. Essayez Plus en local.",
+    "duration": "Durée",
+    "durationMonths": "{count} mois",
+    "durationLabel": "Durée (mois)",
+    "startDate": "Date de début",
+    "startDateHint": "Aujourd’hui par défaut",
+    "invalidDuration": "Indiquez au moins 1 mois",
+    "monthlyTarget": "Objectif mensuel",
+    "timeline": "Calendrier",
+    "expectedVsSaved": "Attendu / épargné",
+    "pace": {
+      "ahead": "En avance",
+      "on_track": "Dans les temps",
+      "tight": "Juste",
+      "behind": "En retard",
+      "won": "Atteint",
+      "lost": "Manqué"
+    }
   },
   "spaces": {
     "title": "Espaces",
@@ -342,6 +388,16 @@
     "goalHit": "{amount} a fait le job — « {goal} » semble complet. Bravo."
   },
   "empty": "Rien pour l'instant",
+  "notif": {
+    "savings_goal": {
+      "title": "Objectif d'épargne à surveiller",
+      "body": "Vous êtes serré ou en retard sur un objectif — ouvrez Objectifs."
+    },
+    "subscription_due": {
+      "title": "Abonnement bientôt dû",
+      "body": "Un prélèvement récurrent arrive dans les prochaines 24 h — voir Accueil."
+    }
+  },
   "account": {
     "title": "Compte",
     "status": "Statut",

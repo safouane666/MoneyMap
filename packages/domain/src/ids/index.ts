@@ -27,7 +27,8 @@ export type IdPrefix =
   | 'sub'
   | 'bill'
   | 'pturn'
-  | 'psess';
+  | 'psess'
+  | 'sched';
 
 export function createId(prefix: IdPrefix): string {
   return `${prefix}_${randomPart(26)}`;

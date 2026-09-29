@@ -1,4 +1,10 @@
-import { currencyDecimalPlaces } from '@clear-money/domain';
+import {
+  addMonthsToIsoDate,
+  currencyDecimalPlaces,
+  monthlyTargetMinor,
+  parseDisplayAmount,
+  type CurrencyCode,
+} from '@clear-money/domain';
 import type { AiAction, AiLedgerContext, AiSuggestion } from './types';
 
 const EXPENSE_DEFAULTS: AiSuggestion[] = [
@@ -238,6 +244,45 @@ export const AI_TOOLS = [
       parameters: { type: 'object', properties: {} },
     },
   },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'plan_goal',
+      description:
+        'Preview a duration savings goal: monthly amount, start/end dates, and timeline. Does NOT create the goal — use create_goal after the user confirms.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Goal name, e.g. Gaming PC' },
+          target: { type: 'number', description: 'Target amount in space currency (major units)' },
+          durationMonths: {
+            type: 'number',
+            description: 'How many months to save over (default 3)',
+          },
+          startDate: { type: 'string', description: 'ISO date YYYY-MM-DD when saving starts; default today' },
+        },
+        required: ['target'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'create_goal',
+      description:
+        'Create a duration savings goal in the ledger after the user confirms the plan. Requires name, target, and duration.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Goal name' },
+          target: { type: 'number', description: 'Target amount in space currency (major units)' },
+          durationMonths: { type: 'number', description: 'Months to save (>= 1)' },
+          startDate: { type: 'string', description: 'Optional ISO start date YYYY-MM-DD' },
+        },
+        required: ['name', 'target', 'durationMonths'],
+      },
+    },
+  },
 ];
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -293,6 +338,81 @@ function formatMajor(amount: number, currency: string) {
 
 function majorFromMinor(amountMinor: number, currency: string): number {
   return amountMinor / 10 ** currencyDecimalPlaces(currency);
+}
+
+function majorToMinor(amountMajor: number, currency: string): number | null {
+  if (!Number.isFinite(amountMajor) || amountMajor <= 0) return null;
+  try {
+    const decimals = currencyDecimalPlaces(currency as CurrencyCode);
+    const display = amountMajor.toFixed(decimals);
+    return parseDisplayAmount(display, currency as CurrencyCode);
+  } catch {
+    return null;
+  }
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function computeGoalPlan(input: {
+  targetMajor: number;
+  durationMonths: number;
+  currency: string;
+  startDate?: string;
+  name?: string;
+}):
+  | {
+      ok: true;
+      name: string | null;
+      targetMajor: number;
+      targetMinor: number;
+      durationMonths: number;
+      startDate: string;
+      endDate: string;
+      monthlyMinor: number;
+      monthlyMajor: number;
+    }
+  | { ok: false; error: string } {
+  const targetMinor = majorToMinor(input.targetMajor, input.currency);
+  if (targetMinor == null) return { ok: false, error: 'target must be a positive amount' };
+  const durationMonths =
+    Number.isFinite(input.durationMonths) && input.durationMonths >= 1
+      ? Math.floor(input.durationMonths)
+      : 3;
+  const startDate = (input.startDate?.slice(0, 10) || todayIsoDate()).slice(0, 10);
+  const endDate = addMonthsToIsoDate(startDate, durationMonths);
+  const monthlyMinor = monthlyTargetMinor({
+    targetMinor,
+    durationMonths,
+    plannedContributionMinor: 0,
+  });
+  return {
+    ok: true,
+    name: input.name?.trim() || null,
+    targetMajor: input.targetMajor,
+    targetMinor,
+    durationMonths,
+    startDate,
+    endDate,
+    monthlyMinor,
+    monthlyMajor: majorFromMinor(monthlyMinor, input.currency),
+  };
+}
+
+function goalPlanReportBody(
+  plan: Extract<ReturnType<typeof computeGoalPlan>, { ok: true }>,
+  currency: string,
+): string {
+  const lines = [
+    plan.name ? `Goal: ${plan.name}` : 'Savings goal plan',
+    `Target: ${formatMajor(plan.targetMajor, currency)}`,
+    `Duration: ${plan.durationMonths} month${plan.durationMonths === 1 ? '' : 's'}`,
+    `Start: ${plan.startDate}`,
+    `End: ${plan.endDate}`,
+    `Monthly save: ${formatMinor(plan.monthlyMinor, currency)}`,
+  ];
+  return lines.join('\n');
 }
 
 async function fetchFxRate(from: string, to: string): Promise<number> {
@@ -582,6 +702,78 @@ export async function runAiTool(
         },
       };
     }
+    case 'plan_goal': {
+      const target = asNumber(args.target);
+      if (target === null || target <= 0) return { ok: false, error: 'target must be positive' };
+      const durationMonths = asNumber(args.durationMonths) ?? 3;
+      const plan = computeGoalPlan({
+        targetMajor: target,
+        durationMonths,
+        currency: context.currency,
+        startDate: asString(args.startDate),
+        name: asString(args.name),
+      });
+      if ('error' in plan) return { ok: false, error: plan.error };
+      const title = plan.name ? `Plan: ${plan.name}` : 'Savings goal plan';
+      const body = goalPlanReportBody(plan, context.currency);
+      actions.push({ type: 'report', title, body });
+      return {
+        ok: true,
+        result: {
+          previewOnly: true,
+          name: plan.name,
+          target: plan.targetMajor,
+          targetMinor: plan.targetMinor,
+          currency: context.currency,
+          durationMonths: plan.durationMonths,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          monthlyAmount: plan.monthlyMajor,
+          monthlyMinor: plan.monthlyMinor,
+          formattedMonthly: formatMinor(plan.monthlyMinor, context.currency),
+        },
+      };
+    }
+    case 'create_goal': {
+      const nameValue = asString(args.name);
+      const target = asNumber(args.target);
+      const durationRaw = asNumber(args.durationMonths);
+      if (!nameValue) return { ok: false, error: 'name is required' };
+      if (target === null || target <= 0) return { ok: false, error: 'target must be positive' };
+      if (durationRaw === null || durationRaw < 1) {
+        return { ok: false, error: 'durationMonths must be at least 1' };
+      }
+      const durationMonths = Math.floor(durationRaw);
+      const plan = computeGoalPlan({
+        targetMajor: target,
+        durationMonths,
+        currency: context.currency,
+        startDate: asString(args.startDate),
+        name: nameValue,
+      });
+      if ('error' in plan) return { ok: false, error: plan.error };
+      actions.push({
+        type: 'create_goal',
+        name: nameValue,
+        targetMajor: target,
+        durationMonths,
+        startDate: plan.startDate,
+      });
+      return {
+        ok: true,
+        result: {
+          queued: true,
+          name: nameValue,
+          target: target,
+          currency: context.currency,
+          durationMonths,
+          startDate: plan.startDate,
+          endDate: plan.endDate,
+          monthlyAmount: plan.monthlyMajor,
+          formattedMonthly: formatMinor(plan.monthlyMinor, context.currency),
+        },
+      };
+    }
     case 'get_report': {
       const focus = asString(args.focus) ?? 'overview';
       const body = [
@@ -641,7 +833,7 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     'If asked who you are: you’re Penny, the Clear Money companion who helps log spend/income, tidy categories, convert currencies, and explain reports — jokes light, ledger honest.',
     'Tone: warm, sharp, lightly funny. Dry humor about money is welcome, but never spam jokes — at most one short quip when it fits.',
     'Keep answers concise and conversational, like a coach sitting next to the ledger — not a corporate FAQ.',
-    'Help register spend/receive, create categories, edit past notes, convert currencies, and explain reports.',
+    'Help register spend/receive, create categories, edit past notes, convert currencies, plan/create duration savings goals, and explain reports.',
     'CRITICAL — ledger actions MUST use tools. Never pretend you saved, created, or converted something without a tool call.',
     'CRITICAL money entry flow:',
     `1) Amounts without an explicit foreign currency code are already in ${context.currency}. Do NOT call convert_currency for them.`,
@@ -650,6 +842,10 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     '4) If category is already clear (e.g. “on coffee”), call add_expense/add_income with that category.',
     '5) When the user asks to create a category, call create_category — do not only acknowledge in chat.',
     '6) Notes are optional after save — do not block saving on a note.',
+    'Savings goals (duration-based):',
+    '- To preview monthly split and timeline without saving, call plan_goal (e.g. Gaming PC, target 2000, 3 months).',
+    '- After the user confirms, call create_goal with name, target, and durationMonths — never claim a goal exists without create_goal.',
+    '- plan_goal pushes a report card in the UI; create_goal queues the real goal.',
     'Editing past entries:',
     '- You CAN update notes and categories. Use find_entries and/or update_entry. Never say you lack this ability.',
     '- “Change the last activity note to …” → update_entry on the newest matching recent id.',

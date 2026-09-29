@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from 'react';
 import {
   computeSafeToSpend,
   formatMinorUnits,
+  monthlyTargetMinor,
   parseDisplayAmount,
   type CurrencyCode,
   type Goal,
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { useI18n } from '@/lib/i18n';
 import { useLedger } from '@/lib/ledger';
-import { getActiveSpace, getSpaceTotals } from '@/lib/demo-state';
+import { getActiveSpace, getSpaceTotals, sumActiveRecurringExpensesMinor } from '@/lib/demo-state';
 import { ApiError } from '@/lib/api';
 
 export default function GoalsPage() {
@@ -33,6 +34,7 @@ export default function GoalsPage() {
     state,
     createGoal,
     updateGoal,
+    evaluateGoal,
     deleteGoal,
     signedIn,
     sessionUser,
@@ -44,24 +46,40 @@ export default function GoalsPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [target, setTarget] = useState('');
+  const [durationMonths, setDurationMonths] = useState('3');
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const [progressFor, setProgressFor] = useState<Goal | null>(null);
   const [progressAmount, setProgressAmount] = useState('');
 
+  const monthlyPreview = useMemo(() => {
+    const targetMinor = Math.abs(parseDisplayAmount(target || '0', space.currency as CurrencyCode));
+    const months = Math.floor(Number(durationMonths));
+    if (targetMinor <= 0 || !Number.isFinite(months) || months < 1) return null;
+    return monthlyTargetMinor({
+      targetMinor,
+      durationMonths: months,
+      plannedContributionMinor: 0,
+    });
+  }, [durationMonths, space.currency, target]);
+
   const safe = useMemo(
     () =>
       computeSafeToSpend({
         incomeMinor: totals.incomeMinor,
         expenseMinor: totals.expenseMinor,
-        plannedContributionMinor: goals.reduce((s, g) => s + g.plannedContributionMinor, 0),
-        scheduledExpenseMinor: 0,
+        plannedContributionMinor: goals.reduce(
+          (s, g) => s + (g.plannedContributionMinor > 0 ? g.plannedContributionMinor : monthlyTargetMinor(g)),
+          0,
+        ),
+        scheduledExpenseMinor: sumActiveRecurringExpensesMinor(state, space.id),
         bufferMinor: 0,
         currency: space.currency,
         hasRequiredInputs: totals.incomeMinor > 0 || state.transactions.length > 0,
       }),
-    [goals, space.currency, state.transactions.length, totals],
+    [goals, space.currency, space.id, state, totals],
   );
 
   const onCreate = async (e: FormEvent) => {
@@ -74,13 +92,21 @@ export default function GoalsPage() {
         parseDisplayAmount(target, space.currency as CurrencyCode),
       );
       if (targetMinor <= 0) throw new ApiError(t('goals.invalidTarget'), 400);
+      const months = Math.floor(Number(durationMonths));
+      if (!Number.isFinite(months) || months < 1) {
+        throw new ApiError(t('goals.invalidDuration'), 400);
+      }
       await createGoal({
         name,
         targetMinor,
         currency: space.currency,
+        durationMonths: months,
+        startDate: startDate.trim() || undefined,
       });
       setName('');
       setTarget('');
+      setDurationMonths('3');
+      setStartDate(new Date().toISOString().slice(0, 10));
       setOpen(false);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : t('goals.createFailed');
@@ -99,6 +125,7 @@ export default function GoalsPage() {
     try {
       const add = Math.abs(parseDisplayAmount(progressAmount, space.currency as CurrencyCode));
       await updateGoal(progressFor.id, { savedMinor: progressFor.savedMinor + add });
+      await evaluateGoal(progressFor.id).catch(() => null);
       setProgressFor(null);
       setProgressAmount('');
     } catch (err) {
@@ -141,6 +168,34 @@ export default function GoalsPage() {
                   placeholder="500"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="goal-duration">{t('goals.durationLabel')}</Label>
+                <Input
+                  id="goal-duration"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={durationMonths}
+                  onChange={(e) => setDurationMonths(e.target.value)}
+                  required
+                />
+                {monthlyPreview != null ? (
+                  <p className="text-xs text-ink-muted">
+                    {t('goals.monthlyTarget')}:{' '}
+                    {formatMinorUnits(monthlyPreview, space.currency, locale)}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="goal-start">{t('goals.startDate')}</Label>
+                <Input
+                  id="goal-start"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <p className="text-xs text-ink-muted">{t('goals.startDateHint')}</p>
               </div>
               {locked ? (
                 <PlanGate title={t('goals.lockedTitle')} body={t('goals.lockedBody')} />

@@ -65,6 +65,13 @@ export type AiAction =
       category?: string;
     }
   | {
+      type: 'create_goal';
+      name: string;
+      targetMajor: number;
+      durationMonths: number;
+      startDate?: string;
+    }
+  | {
       type: 'report';
       title: string;
       body: string;

@@ -101,6 +101,12 @@ describe('providers', () => {
     }
   });
 
+  it('post_due_recurring requires database', async () => {
+    await expect(runJobHandler(job({ type: 'post_due_recurring' }))).rejects.toThrow(
+      /requires database/,
+    );
+  });
+
   it('failureMessage surfaces provider errors', () => {
     expect(failureMessage(new ProviderUnavailableError('no key'))).toBe('no key');
   });
