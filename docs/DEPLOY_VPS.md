@@ -44,6 +44,8 @@ DATABASE_URL=postgresql://clearmoney:clearmoney@postgres:5432/clearmoney
 
 ## 2. Start the stack
 
+### A) Dedicated VPS (MoneyMap owns :80/:443)
+
 From the repo root:
 
 ```bash
@@ -51,6 +53,19 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 ```
 
 Only **Nginx** publishes host ports **80** and **443**. Postgres/MinIO stay on the Docker network (the prod overlay clears their host port maps). Day-to-day local DB/MinIO via `docker-compose.yml` alone is unchanged.
+
+### B) Shared host with an existing edge nginx (e.g. Nexus)
+
+If another stack already binds **80/443**, use the VPS overlay (no MoneyMap edge nginx) and route the subdomain through the existing proxy:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.vps.yml \
+  --env-file .env.production up -d --build
+```
+
+- Attach `moneymap-api` / `moneymap-web` to the edge Docker network.
+- Use nginx snippets in `deploy/nginx/moneymap.phronexus-ai.com*.conf` (HTTP bootstrap, then TLS).
+- Set `DATABASE_URL` host to **`moneymap-postgres`** (not `postgres`) so it does not collide with another DB on the shared network.
 
 ## 3. Migrate (and optional seed)
 

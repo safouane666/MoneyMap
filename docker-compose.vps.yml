@@ -1,0 +1,44 @@
+# VPS overlay: share Nexus edge nginx network; do not publish host :80/:443.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.vps.yml \
+#     --env-file .env.production up -d --build
+
+services:
+  postgres:
+    container_name: moneymap-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clearmoney}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clearmoney}
+      POSTGRES_DB: ${POSTGRES_DB:-clearmoney}
+
+  # Real MinIO image is blocked on this host's Docker Hub pulls.
+  # Stub keeps api/worker depends_on satisfied; receipt uploads won't work until MinIO is restored.
+  minio:
+    image: alpine:3.20
+    container_name: moneymap-minio
+    command: ['sleep', 'infinity']
+    restart: unless-stopped
+
+  api:
+    container_name: moneymap-api
+    networks:
+      - default
+      - nexus
+
+  web:
+    container_name: moneymap-web
+    networks:
+      - default
+      - nexus
+
+  worker:
+    container_name: moneymap-worker
+
+  # Host ports already used by nexus-nginx — keep MoneyMap nginx off the VPS edge.
+  nginx:
+    profiles: ['standalone-edge']
+
+networks:
+  nexus:
+    external: true
+    name: deploy_nexus-net
