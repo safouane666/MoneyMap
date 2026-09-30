@@ -1,5 +1,4 @@
 {
-  "_comment": "Replace YOUR_DOMAIN below and eas.projectId in app.json after linking an EAS project (eas init).",
   "cli": {
     "version": ">= 12.0.0",
     "appVersionSource": "remote"
@@ -11,7 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
       }
     },
     "production": {
@@ -19,7 +19,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
       }
     },
     "ios": {
@@ -27,7 +28,8 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_DOMAIN/cm-api"
+        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
       }
     }
   },

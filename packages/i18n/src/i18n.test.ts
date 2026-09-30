@@ -6,6 +6,12 @@ describe('t', () => {
     expect(t('en', 'nav.home')).toBe('Home');
   });
 
+  it('resolves recurring copy like web home', () => {
+    expect(t('en', 'recurring.salaryTitle')).toBe('Salary & income');
+    expect(t('en', 'recurring.addSalary')).toBe('Add income');
+    expect(t('en', 'recurring.subscriptionsEmpty')).toBe('No subscriptions yet.');
+  });
+
   it('resolves BCP 47 region tags to language bundle', () => {
     expect(t('fr-FR', 'nav.home')).toBe('Accueil');
     expect(t('ar-TN', 'nav.home')).toBe('الرئيسية');

@@ -1,37 +1,74 @@
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Body, PrimaryButton, SecondaryButton, Title } from '../../src/components/ui';
-import { saveSetupSession } from '../../src/lib/setup-session';
-import { colors, space } from '../../src/theme/tokens';
-import { requestNotificationPermission } from '../../src/notifications/expo-scheduler';
+import type { Href } from 'expo-router';
+import { SetupShell } from '../../src/components/SetupShell';
+import { PrimaryButton } from '../../src/components/ui';
+import { markSetupStep, saveSetupSession } from '../../src/lib/setup-session';
+import { nextSetupRoute } from '../../src/lib/setup-steps';
+import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const [enabled, setEnabled] = useState(true);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas, padding: space[6] }}>
-      <Title>Gentle reminders</Title>
-      <Body>
-        Clear Money can prepare small daily facts, weekly reviews, and goal progress on this device.
-        Amounts are hidden on the lock screen by default.
-      </Body>
+    <SetupShell stepId="notifications">
+      <Text style={styles.title}>Gentle nudges</Text>
+      <Text style={styles.body}>
+        Optional daily facts and weekly reviews — never spammy, always yours to turn off.
+      </Text>
+      <Pressable
+        onPress={() => setEnabled(true)}
+        style={[styles.card, enabled && styles.cardOn]}
+      >
+        <Text style={[styles.cardTitle, enabled && styles.on]}>Yes, enable reminders</Text>
+        <Text style={styles.cardBody}>
+          Stay gently aware of spending without opening the app every day.
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setEnabled(false)}
+        style={[styles.card, !enabled && styles.cardOn]}
+      >
+        <Text style={[styles.cardTitle, !enabled && styles.on]}>Not now</Text>
+      </Pressable>
+      <View style={{ height: space[4] }} />
       <PrimaryButton
-        label="Enable reminders"
+        label="Continue"
         onPress={async () => {
-          await requestNotificationPermission();
-          await saveSetupSession({ notificationsEnabled: true, step: 'intro' });
-          router.push('/setup/intro');
+          await saveSetupSession({ notificationsEnabled: enabled });
+          await markSetupStep('notifications');
+          if (enabled) {
+            try {
+              const { enableNotificationsAndBurst } = await import(
+                '../../src/notifications/sync'
+              );
+              await enableNotificationsAndBurst();
+            } catch (err) {
+              console.warn('[setup] notification enable failed', err);
+            }
+          }
+          router.push(nextSetupRoute('notifications') as Href);
         }}
       />
-      <View style={{ height: space[3] }} />
-      <SecondaryButton
-        label="Not now"
-        onPress={async () => {
-          await saveSetupSession({ notificationsEnabled: false, step: 'intro' });
-          router.push('/setup/intro');
-        }}
-      />
-    </SafeAreaView>
+    </SetupShell>
   );
 }
+
+const styles = StyleSheet.create({
+  title: { fontSize: 28, fontWeight: '700', color: colors.ink, letterSpacing: -0.3 },
+  body: { fontSize: 15, lineHeight: 22, color: colors.inkSecondary, marginBottom: space[4] },
+  card: {
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: space[4],
+    marginBottom: space[3],
+  },
+  cardOn: { borderColor: colors.brand, backgroundColor: colors.brandTint },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.ink },
+  on: { color: colors.brand },
+  cardBody: { marginTop: space[2], fontSize: 14, lineHeight: 20, color: colors.inkSecondary },
+});

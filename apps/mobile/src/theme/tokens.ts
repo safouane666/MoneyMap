@@ -63,4 +63,37 @@ export const motion = {
 
 export const touchTarget = 48;
 
-export type ThemeColors = typeof colors;
+/** Matches web `--cm-shadow` / `.cm-shadow`. */
+export const shadow = {
+  card: {
+    shadowColor: '#101828',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  fab: {
+    shadowColor: '#101828',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+} as const;
+
+export type ThemeColors = {
+  canvas: string;
+  surface: string;
+  elevated: string;
+  ink: string;
+  inkSecondary: string;
+  inkMuted: string;
+  brand: string;
+  brandTint: string;
+  income: string;
+  expense: string;
+  warning: string;
+  ai: string;
+  info: string;
+  border: string;
+};

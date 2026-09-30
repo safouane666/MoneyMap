@@ -1,77 +1,202 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { t } from '@clear-money/i18n';
-import { offlineQueue, offlineStore } from '../../src/offline/client';
-import type { OfflineTransaction } from '../../src/offline/queue';
-import { colors, radius, space } from '../../src/theme/tokens';
+import type { LedgerTransaction } from '@clear-money/domain';
+import { ActivityTxnRow } from '../../src/components/ActivityTxnRow';
+import { ExportButton } from '../../src/components/ExportButton';
+import {
+  MonthYearFilter,
+  currentMonthYear,
+  inMonthYear,
+  type MonthYear,
+} from '../../src/components/MonthYearFilter';
+import { SwipeableActivityRow } from '../../src/components/SwipeableActivityRow';
+import { useToast } from '../../src/components/Toast';
+import { t } from '../../src/lib/i18n';
+import { hideTxnId, loadHiddenTxnIds, unhideTxnId } from '../../src/lib/hidden-txns';
+import {
+  categoryName,
+  deleteTransaction,
+  loadLedger,
+  restoreTransaction,
+  visibleTransactionsForSpace,
+  type MobileLedger,
+} from '../../src/lib/ledger';
+import { loadSetupSession } from '../../src/lib/setup-session';
+import { offlineQueue } from '../../src/offline/client';
+import { useThemeColors } from '../../src/theme/ThemeContext';
+import { radius, shadow, space } from '../../src/theme/tokens';
 
 export default function ActivityScreen() {
-  const [rows, setRows] = useState<OfflineTransaction[]>([]);
+  const colors = useThemeColors();
+  const { showToast } = useToast();
+  const [locale, setLocale] = useState('en');
+  const [ledger, setLedger] = useState<MobileLedger | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [monthYear, setMonthYear] = useState<MonthYear>(currentMonthYear);
+
+  const refresh = useCallback(async () => {
+    setLocale((await loadSetupSession()).language);
+    setHiddenIds(await loadHiddenTxnIds());
+    await offlineQueue.reconcile().catch(() => undefined);
+    try {
+      setLedger(await loadLedger());
+    } catch {
+      /* keep previous */
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      void (async () => {
-        await offlineQueue.reconcile().catch(() => undefined);
-        setRows(await offlineStore.list());
-      })();
-    }, []),
+      void refresh();
+    }, [refresh]),
   );
 
+  const activeSpace = ledger?.spaces.find((s) => s.id === ledger.activeSpaceId);
+  const rows = useMemo(() => {
+    if (!ledger) return [];
+    return visibleTransactionsForSpace(ledger, hiddenIds).filter((txn) =>
+      inMonthYear(txn.occurredAt, monthYear),
+    );
+  }, [ledger, hiddenIds, monthYear]);
+
+  const fileSuffix = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, '0')}`;
+
+  const handleHide = async (id: string) => {
+    setHiddenIds(await hideTxnId(id));
+    showToast({
+      message: t(locale, 'app.hidden'),
+      actionLabel: t(locale, 'app.undo'),
+      onAction: () => {
+        void unhideTxnId(id).then(setHiddenIds);
+      },
+    });
+  };
+
+  const handleDelete = async (txn: LedgerTransaction) => {
+    try {
+      await deleteTransaction(txn.spaceId, txn.id);
+      setLedger((prev) =>
+        prev
+          ? { ...prev, transactions: prev.transactions.filter((row) => row.id !== txn.id) }
+          : prev,
+      );
+      showToast({
+        message: t(locale, 'app.deleted'),
+        actionLabel: t(locale, 'app.undo'),
+        onAction: () => {
+          void restoreTransaction(txn).then(() => void refresh());
+        },
+      });
+    } catch (err) {
+      showToast({ message: err instanceof Error ? err.message : t(locale, 'errors.generic') });
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <View style={[styles.safe, { backgroundColor: colors.canvas }]}>
       <FlatList
         contentContainerStyle={styles.content}
         data={rows}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
-          <Text style={styles.title}>{t('en', 'nav.activity')}</Text>
+          <View style={{ gap: space[3], marginBottom: space[3] }}>
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.title, { color: colors.ink }]}>{t(locale, 'nav.activity')}</Text>
+                <Text style={[styles.hint, { color: colors.inkSecondary }]}>
+                  {t(locale, 'app.swipeHint')}
+                </Text>
+              </View>
+              {activeSpace ? (
+                <ExportButton
+                  transactions={rows}
+                  fileSuffix={fileSuffix}
+                  spaceName={activeSpace.name}
+                  role={activeSpace.role}
+                  locale={locale}
+                />
+              ) : null}
+            </View>
+            {ledger?.offline ? (
+              <Text style={{ color: colors.warning, fontSize: 13 }}>{t(locale, 'home.offline')}</Text>
+            ) : null}
+            <MonthYearFilter value={monthYear} onChange={setMonthYear} />
+          </View>
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>{t('en', 'txn.empty')}</Text>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.desc}>{item.description ?? item.type}</Text>
-              <Text style={styles.meta}>
-                {item.status === 'pending_sync'
-                  ? t('en', 'txn.pendingSync')
-                  : item.occurredAt.slice(0, 10)}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.amount,
-                { color: item.type === 'income' ? colors.income : colors.expense },
-              ]}
-            >
-              {(item.amountMinor / 100).toFixed(2)} {item.currency}
+          <View
+            style={[
+              styles.empty,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <Text style={{ color: colors.inkSecondary, fontSize: 14, textAlign: 'center' }}>
+              {t(locale, 'app.emptyHint')}
             </Text>
+            <Text style={{ color: colors.inkMuted, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+              {t(locale, 'app.emptyCta')}
+            </Text>
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <View
+            style={[
+              index === 0 && styles.listTop,
+              index === rows.length - 1 && styles.listBottom,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+              index < rows.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth },
+            ]}
+          >
+            <SwipeableActivityRow
+              locale={locale}
+              onHide={() => void handleHide(item.id)}
+              onDelete={() => void handleDelete(item)}
+            >
+              <ActivityTxnRow
+                item={item}
+                locale={locale}
+                category={ledger ? categoryName(ledger, item.categoryId) : ''}
+              />
+            </SwipeableActivityRow>
           </View>
         )}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.canvas },
-  content: { padding: space[6], paddingBottom: space[12], gap: space[3] },
-  title: { fontSize: 28, fontWeight: '700', color: colors.ink, marginBottom: space[4] },
-  empty: { color: colors.inkSecondary, fontSize: 16 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
+  safe: { flex: 1 },
+  content: {
+    paddingHorizontal: space[4],
+    paddingTop: space[6],
+    paddingBottom: 180,
+  },
+  header: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: space[3] },
+  title: { fontSize: 24, fontWeight: '600', letterSpacing: -0.3 },
+  hint: { marginTop: 4, fontSize: 13 },
+  empty: {
     borderRadius: radius.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: space[4],
-    gap: space[3],
+    borderStyle: 'dashed',
+    paddingHorizontal: space[6],
+    paddingVertical: space[8],
   },
-  desc: { color: colors.ink, fontSize: 16, fontWeight: '600' },
-  meta: { color: colors.inkMuted, fontSize: 13, marginTop: 2 },
-  amount: { fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  listTop: {
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    overflow: 'hidden',
+    ...shadow.card,
+  },
+  listBottom: {
+    borderBottomLeftRadius: radius.card,
+    borderBottomRightRadius: radius.card,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+  },
 });

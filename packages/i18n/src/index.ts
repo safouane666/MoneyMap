@@ -1,6 +1,9 @@
-import ar from './locales/ar.json' with { type: 'json' };
-import en from './locales/en.json' with { type: 'json' };
-import fr from './locales/fr.json' with { type: 'json' };
+import ar from './locales/ar.json';
+import en from './locales/en.json';
+import fr from './locales/fr.json';
+
+/** Bump when locale JSON changes so Metro invalidates the package graph. */
+export const I18N_CATALOG_REV = 3;
 
 export type MessageCatalog = Record<string, string>;
 export type MessageParams = Record<string, string | number>;

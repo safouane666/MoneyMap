@@ -17,7 +17,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.clearmoney.mobile",
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -26,10 +28,23 @@
         "backgroundColor": "#F7F8FA"
       },
       "package": "app.clearmoney.mobile",
-      "permissions": ["RECEIVE_BOOT_COMPLETED", "SCHEDULE_EXACT_ALARM", "POST_NOTIFICATIONS"]
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "plugins": [
       "expo-router",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#F7F8FA",
+          "imageWidth": 200
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -46,8 +61,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "3a6fc854-be1e-44b0-a7a7-548993378a29"
       }
-    }
+    },
+    "owner": "safouane666"
   }
 }

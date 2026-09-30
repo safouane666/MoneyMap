@@ -1,42 +1,65 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { firstIncompleteRoute, SETUP_STEPS, type SetupStepId } from './setup-steps';
 
-const KEY = 'cm.localSetupSession';
+const KEY = 'cm.setup.session';
 
-export interface LocalSetupSession {
-  step: 'welcome' | 'language' | 'currency' | 'notifications' | 'intro' | 'done';
-  locale: string;
+export type SetupLanguage = 'en' | 'fr' | 'ar';
+
+export interface SetupSession {
+  language: SetupLanguage;
   currency: string;
-  notificationsEnabled: boolean | null;
-  updatedAt: string;
+  notificationsEnabled: boolean;
+  completedSteps: string[];
+  welcomeSeen: boolean;
+  companionSeen: boolean;
 }
 
-const DEFAULT_SESSION: LocalSetupSession = {
-  step: 'welcome',
-  locale: 'en',
+export const DEFAULT_SETUP: SetupSession = {
+  language: 'en',
   currency: 'USD',
-  notificationsEnabled: null,
-  updatedAt: new Date(0).toISOString(),
+  notificationsEnabled: true,
+  completedSteps: [],
+  welcomeSeen: false,
+  companionSeen: false,
 };
 
-export async function loadSetupSession(): Promise<LocalSetupSession> {
+export async function loadSetupSession(): Promise<SetupSession> {
   const raw = await AsyncStorage.getItem(KEY);
-  if (!raw) return { ...DEFAULT_SESSION };
+  if (!raw) return { ...DEFAULT_SETUP };
   try {
-    return { ...DEFAULT_SESSION, ...(JSON.parse(raw) as LocalSetupSession) };
+    return { ...DEFAULT_SETUP, ...(JSON.parse(raw) as Partial<SetupSession>) };
   } catch {
-    return { ...DEFAULT_SESSION };
+    return { ...DEFAULT_SETUP };
   }
 }
 
 export async function saveSetupSession(
-  patch: Partial<LocalSetupSession>,
-): Promise<LocalSetupSession> {
+  patch: Partial<SetupSession>,
+): Promise<SetupSession> {
   const current = await loadSetupSession();
-  const next: LocalSetupSession = {
-    ...current,
-    ...patch,
-    updatedAt: new Date().toISOString(),
-  };
+  const next = { ...current, ...patch };
   await AsyncStorage.setItem(KEY, JSON.stringify(next));
   return next;
+}
+
+export async function markSetupStep(step: SetupStepId | string): Promise<SetupSession> {
+  const current = await loadSetupSession();
+  const completedSteps = current.completedSteps.includes(step)
+    ? current.completedSteps
+    : [...current.completedSteps, step];
+  return saveSetupSession({ completedSteps });
+}
+
+export async function getSetupResumePath(): Promise<string> {
+  const session = await loadSetupSession();
+  return firstIncompleteRoute(session.completedSteps);
+}
+
+export async function isSetupComplete(): Promise<boolean> {
+  const session = await loadSetupSession();
+  return SETUP_STEPS.every((s) => session.completedSteps.includes(s));
+}
+
+export async function clearSetupSession(): Promise<void> {
+  await AsyncStorage.removeItem(KEY);
 }

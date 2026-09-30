@@ -1,71 +1,59 @@
 # Clear Money mobile (Expo)
 
+Native Expo Router app (auth, spaces, Penny, sync) pointed at the production API.
+
 ## Run (dev)
 
-```bash
-pnpm install
-# Optional: point at a local or LAN API (paths are relative to this base)
-# export EXPO_PUBLIC_API_URL=http://localhost:3011
-# Or same-origin style via web proxy: http://<host>:8259/cm-api
-pnpm --filter @clear-money/mobile start
+```powershell
+cd D:\Work\MoneyMap\apps\mobile
+# Optional .env:
+# EXPO_PUBLIC_API_URL=https://moneymap.phronexus-ai.com/cm-api
+# EXPO_PUBLIC_WEB_URL=https://moneymap.phronexus-ai.com
+pnpm exec expo start --clear --lan
 ```
 
-Then press `a` for Android emulator or `i` for iOS simulator.
+### Penny (Skia)
 
-## Production API URL
+- **Expo Go:** View-based Penny (Skia/SVG Fabric natives often fail with “View config … undefined” in monorepo + New Arch).
+- **EAS APK / `expo-dev-client`:** Skia Penny (`@shopify/react-native-skia@1.5.0`, same geometry as web). Metro pins the `react-native` package field for Skia.
 
-Release builds **must** set `EXPO_PUBLIC_API_URL` to the public HTTPS API base — typically:
+### Google sign-in
 
-```text
-https://YOUR_DOMAIN/cm-api
-```
+Opens the **system browser** at `/cm-api/public/mobile-google-oauth` (not a WebView). That route sets Better Auth’s OAuth state cookie in the browser jar, redirects to Google, then `/cm-api/public/mobile-google-done` deep-links back (`clearmoney://` / `exp://`) with the session.
 
-Never ship `localhost`, `127.0.0.1`, or LAN IPs in release profiles. Configure this in:
+**Requires a redeployed API** that includes those two `/public/mobile-google-*` routes. Until then the browser will 404 / bounce to the website instead of Google.
 
-- `eas.json` → `build.<profile>.env.EXPO_PUBLIC_API_URL` (placeholders today)
-- or EAS project secrets / env UI
-
-Rebuild after changing the domain (`eas build --profile apk` / `ios`).
-
-## EAS builds
-
-Profiles in `eas.json`:
-
-| Profile | Output | Notes |
-| --- | --- | --- |
-| `apk` | Android APK | Sideload / internal testers |
-| `production` | Android AAB | Optional; for Play upload later |
-| `ios` | iOS (simulator by default) | Device/TestFlight needs Apple Developer |
-
-Before first build:
-
-1. Replace `expo.extra.eas.projectId` in `app.json` with a real EAS project id (`eas init` / Expo dashboard). The current value is a **placeholder**.
-2. Replace `YOUR_DOMAIN` in `eas.json` env values.
-3. Sign in with Expo (`eas login`).
+On the VPS (from the MoneyMap clone):
 
 ```bash
-eas build --platform android --profile apk
-eas build --platform ios --profile ios
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.vps.yml \
+  --env-file .env.production up -d --build api web
 ```
 
-## Features in this app (v1)
+Smoke:
 
-- First-run: welcome → language → currency → notifications (opt-in) → intro → auth
-- Email sign-in / sign-up against Better Auth (`/auth/sign-in/email`, `/auth/sign-up/email`) with session in `expo-secure-store`
-- Tabs: Home, Activity, Reports, Spaces + persistent Add FAB
-- Offline queue with idempotency keys (`src/offline`) shared by Add / Activity / Home
-- Sync: `POST /spaces/:spaceId/transactions` with `Idempotency-Key`
-- Device-local notification planner (`src/notifications`) — no server cron
-- Shared `@clear-money/domain` for money rules
-- **Free-only** monetization on mobile v1 (no IAP / Stripe checkout in the app)
+```bash
+curl -sI "https://moneymap.phronexus-ai.com/cm-api/public/mobile-google-oauth?to=clearmoney://auth/callback"
+# expect 302 Location: https://accounts.google.com/...
+```
 
-## Not implemented yet
+## EAS APK
 
-- Camera / receipt OCR
-- Biometrics
-- Store listing assets (final icons/splash) — placeholders remain
-- Play Console / App Store upload (Phase 8)
+```powershell
+cd D:\Work\MoneyMap\apps\mobile
+.\eas-on-d.ps1 build --platform android --profile apk
+```
 
-## Notes
+Env in `eas.json` already points at production. Never ship `localhost` / LAN IPs in release profiles.
 
-Notification delivery is best-effort per OS rules. Tracking still works if the user declines notification permission.
+| Profile | Output |
+| --- | --- |
+| `apk` | Android APK |
+| `production` | Android AAB |
+| `ios` | iOS |
+
+After install: open **Settings → Enable reminders** (or **Send test notifications**) and allow OS permission. You should get ~10 alerts over ~3 minutes, plus the normal planner schedule.
+
+## v1 scope
+
+Auth + personal space + add/list/sync + Penny + local notifications. Free-only (no IAP).

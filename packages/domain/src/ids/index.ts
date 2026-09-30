@@ -2,10 +2,22 @@
 
 const ALPHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+function fillRandom(bytes: Uint8Array): void {
+  const webCrypto = globalThis.crypto;
+  if (webCrypto && typeof webCrypto.getRandomValues === 'function') {
+    webCrypto.getRandomValues(bytes);
+    return;
+  }
+  // Hermes / older RN: no Web Crypto until a polyfill runs (see apps/mobile/index.js).
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+}
+
 function randomPart(length: number): string {
   let out = '';
   const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
+  fillRandom(bytes);
   for (let i = 0; i < length; i++) {
     out += ALPHA[bytes[i]! % ALPHA.length];
   }

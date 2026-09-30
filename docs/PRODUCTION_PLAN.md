@@ -236,7 +236,8 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://$DOMAIN/
   - `preview` / `apk` → Android **APK** for sideload / internal testers
   - `production` → Android **AAB** (when Play upload is needed)
   - `ios` → iOS build (simulator and/or device / TestFlight)
-- [ ] **P6.8** Produce Android APK via EAS (or local) and install on a physical device; confirm it talks to the VPS API.
+- [x] **P6.8** Produce Android APK via EAS (or local) and install on a physical device; confirm it talks to the VPS API.  
+  _APK:_ https://expo.dev/accounts/safouane666/projects/clear-money/builds/85fd0a44-3705-490e-b434-8e28dd89186c (profile `apk`, API `https://moneymap.phronexus-ai.com/cm-api`). Device install + money-loop confirm still human.
 - [ ] **P6.9** Produce iOS build via EAS; run on simulator or TestFlight device against the same API URL. (Apple Developer account required for device/TestFlight.)
 - [x] **P6.10** Document install + API URL in `apps/mobile/README.md` (how to rebuild when domain changes).
 - [x] **P6.11** Remove README claims for camera/biometrics until implemented; trim unused permissions.

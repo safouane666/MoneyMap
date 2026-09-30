@@ -1,51 +1,100 @@
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { formatMinorUnits } from '@clear-money/domain';
-import { Body, PrimaryButton, Title } from '../../src/components/ui';
-import { loadSetupSession, saveSetupSession } from '../../src/lib/setup-session';
-import { colors, space } from '../../src/theme/tokens';
-import { useEffect, useState } from 'react';
-
-const CURRENCIES = ['USD', 'EUR', 'TND', 'GBP', 'JPY'];
+import type { Href } from 'expo-router';
+import { CURRENCY_CATALOG } from '@clear-money/domain';
+import { SetupShell } from '../../src/components/SetupShell';
+import { PrimaryButton } from '../../src/components/ui';
+import { markSetupStep, saveSetupSession } from '../../src/lib/setup-session';
+import { nextSetupRoute } from '../../src/lib/setup-steps';
+import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function CurrencyScreen() {
   const router = useRouter();
   const [currency, setCurrency] = useState('USD');
-  const [locale, setLocale] = useState('en');
+  const [query, setQuery] = useState('');
 
-  useEffect(() => {
-    void loadSetupSession().then((s) => {
-      setCurrency(s.currency);
-      setLocale(s.locale);
-    });
-  }, []);
+  const filtered = useMemo(
+    () =>
+      CURRENCY_CATALOG.filter(
+        (c) =>
+          c.code.toLowerCase().includes(query.toLowerCase()) ||
+          c.name.toLowerCase().includes(query.toLowerCase()),
+      ).slice(0, 12),
+    [query],
+  );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas, padding: space[6] }}>
-      <Title>Choose your currency</Title>
-      <Body>Default for new entries. Stored amounts are never silently converted.</Body>
-      {CURRENCIES.map((code) => (
-        <Text
-          key={code}
-          onPress={() => setCurrency(code)}
-          style={{
-            paddingVertical: space[3],
-            color: currency === code ? colors.brand : colors.ink,
-            fontWeight: currency === code ? '700' : '400',
-          }}
-        >
-          {code} — Coffee {formatMinorUnits(1250, code === 'TND' ? 'TND' : code === 'JPY' ? 'JPY' : 'USD', locale)}
-        </Text>
-      ))}
-      <View style={{ flex: 1 }} />
+    <SetupShell stepId="currency">
+      <Text style={styles.title}>Your home currency</Text>
+      <Text style={styles.body}>
+        Amounts and reports will default to this. You can still log other currencies later.
+      </Text>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search currencies"
+        placeholderTextColor={colors.inkMuted}
+        style={styles.input}
+      />
+      <ScrollView style={styles.list} nestedScrollEnabled>
+        {filtered.map((c) => {
+          const on = currency === c.code;
+          return (
+            <Pressable
+              key={c.code}
+              onPress={() => setCurrency(c.code)}
+              style={[styles.row, on && styles.rowOn]}
+            >
+              <Text style={[styles.rowText, on && styles.rowTextOn]}>
+                {c.code} · {c.name}
+              </Text>
+              <Text style={styles.symbol}>{c.symbol}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      <View style={{ height: space[4] }} />
       <PrimaryButton
         label="Continue"
         onPress={async () => {
-          await saveSetupSession({ currency, step: 'notifications' });
-          router.push('/setup/notifications');
+          await saveSetupSession({ currency });
+          await markSetupStep('currency');
+          router.push(nextSetupRoute('currency') as Href);
         }}
       />
-    </SafeAreaView>
+    </SetupShell>
   );
 }
+
+const styles = StyleSheet.create({
+  title: { fontSize: 28, fontWeight: '700', color: colors.ink, letterSpacing: -0.3 },
+  body: { fontSize: 15, lineHeight: 22, color: colors.inkSecondary, marginBottom: space[4] },
+  input: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.control,
+    paddingHorizontal: space[4],
+    backgroundColor: colors.surface,
+    color: colors.ink,
+    marginBottom: space[3],
+  },
+  list: { maxHeight: 280 },
+  row: {
+    minHeight: 48,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: space[4],
+    marginBottom: space[2],
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rowOn: { borderColor: colors.brand, backgroundColor: colors.brandTint },
+  rowText: { fontSize: 14, color: colors.ink, flex: 1 },
+  rowTextOn: { color: colors.brand, fontWeight: '600' },
+  symbol: { color: colors.inkMuted, marginLeft: space[2] },
+});
