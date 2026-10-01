@@ -3,6 +3,8 @@ import {
   money,
   addMoney,
   parseDisplayAmount,
+  parseAmountInput,
+  evaluateAmountExpression,
   formatMinorUnits,
   currencyDecimalPlaces,
   computePeriodTotals,
@@ -92,6 +94,13 @@ describe('money', () => {
 
   it('rejects excess decimals', () => {
     expect(() => parseDisplayAmount('1.234', 'USD')).toThrow();
+  });
+
+  it('evaluates quick amount expressions', () => {
+    expect(evaluateAmountExpression('12+3.5')).toBe('15.5');
+    expect(evaluateAmountExpression('10×2+1')).toBe('21');
+    expect(evaluateAmountExpression('100÷4')).toBe('25');
+    expect(parseAmountInput('12+3', 'USD')).toBe(1500);
   });
 });
 
@@ -306,7 +315,7 @@ describe('permissions', () => {
 });
 
 describe('entitlements', () => {
-  it('free plan allows personal + shared space, blocks a third', () => {
+  it('free plan allows unlimited spaces', () => {
     const oneSpace: EntitlementContext = {
       plan: 'free',
       personalSpaceCount: 1,
@@ -316,12 +325,12 @@ describe('entitlements', () => {
     };
     expect(canCreateSpace(oneSpace).ok).toBe(true);
 
-    const twoSpaces: EntitlementContext = {
+    const manySpaces: EntitlementContext = {
       ...oneSpace,
-      personalSpaceCount: 1,
-      totalSpaceCount: 2,
+      personalSpaceCount: 3,
+      totalSpaceCount: 8,
     };
-    expect(canCreateSpace(twoSpaces).ok).toBe(false);
+    expect(canCreateSpace(manySpaces).ok).toBe(true);
     expect(planHasFeature('free', 'goals')).toBe(true);
     expect(planHasFeature('free', 'penny_chat')).toBe(true);
     expect(planHasFeature('free', 'shared_members')).toBe(true);

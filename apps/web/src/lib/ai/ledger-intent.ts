@@ -1,4 +1,4 @@
-import { currencyDecimalPlaces } from '@clear-money/domain';
+import { currencyDecimalPlaces, matchDefaultCategoryHint } from '@clear-money/domain';
 import { buildCategorySuggestions, runAiTool } from './tools';
 import type { AiAction, AiLedgerContext } from './types';
 
@@ -89,9 +89,8 @@ function extractCategoryHint(tail: string | undefined): string | undefined {
   if (!t || t.length > 40) return undefined;
   t = t.replace(/^(a|an|the)\s+/i, '').trim();
   if (!t) return undefined;
-  // Normalize common places
-  if (/^restaurants?$/i.test(t)) return 'Food & Restaurants';
-  if (/^coffees?$/i.test(t)) return 'Coffee';
+  const mapped = matchDefaultCategoryHint(t, 'expense');
+  if (mapped) return mapped;
   return titleCaseName(t);
 }
 

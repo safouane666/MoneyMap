@@ -1,5 +1,6 @@
 export * from './ids/index.js';
 export * from './money/index.js';
+export * from './categories/defaults.js';
 export * from './reports/totals.js';
 export * from './reports/time.js';
 export * from './goals/index.js';

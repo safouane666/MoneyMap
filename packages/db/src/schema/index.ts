@@ -72,7 +72,7 @@ export const spaces = pgTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    type: text('type').notNull(), // personal | project | family | company
+    type: text('type').notNull(), // personal | household | shared | project | family | company
     currency: text('currency').notNull().default('USD'),
     timezone: text('timezone').notNull().default('UTC'),
     ownerId: text('owner_id')

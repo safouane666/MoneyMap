@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
-import { parseDisplayAmount } from '@clear-money/domain';
+import { formatCategoryChip, parseAmountInput } from '@clear-money/domain';
 import { AmountInput } from '@/components/AmountInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,8 +37,13 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const [error, setError] = useState<string | null>(null);
 
   const categories = useMemo(
-    () => state.categories.filter((c) => c.type === type),
-    [state.categories, type],
+    () =>
+      state.categories.filter(
+        (c) =>
+          c.type === type &&
+          (c.spaceId == null || c.spaceId === space.id),
+      ),
+    [state.categories, type, space.id],
   );
 
   useEffect(() => {
@@ -50,7 +55,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const handleSave = () => {
     try {
       setError(null);
-      const amountMinor = Math.abs(parseDisplayAmount(amount || '0', space.currency));
+      const amountMinor = Math.abs(parseAmountInput(amount || '0', space.currency));
       if (amountMinor <= 0) {
         setError(t('txn.enterAmount'));
         return;
@@ -177,7 +182,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
                     : 'border-border bg-surface text-ink hover:border-brand/40',
                 )}
               >
-                {c.name}
+                {formatCategoryChip(c.name, c.stableKey)}
               </button>
             ))
           )}

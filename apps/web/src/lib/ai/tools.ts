@@ -1,35 +1,58 @@
 import {
   addMonthsToIsoDate,
   currencyDecimalPlaces,
+  DEFAULT_EXPENSE_CATEGORIES,
+  DEFAULT_INCOME_CATEGORIES,
+  formatCategoryChip,
+  matchDefaultCategoryHint,
   monthlyTargetMinor,
   parseDisplayAmount,
+  stripCategoryEmoji,
   type CurrencyCode,
 } from '@clear-money/domain';
 import type { AiAction, AiLedgerContext, AiSuggestion } from './types';
 
-const EXPENSE_DEFAULTS: AiSuggestion[] = [
-  { label: 'Food', value: 'Food', icon: 'utensils' },
-  { label: 'Coffee', value: 'Coffee', icon: 'coffee' },
-  { label: 'Clothes', value: 'Clothes', icon: 'shopping-bag' },
-  { label: 'Transport', value: 'Transport', icon: 'car' },
-  { label: 'Rent', value: 'Rent', icon: 'home' },
-  { label: 'Shopping', value: 'Shopping', icon: 'shopping-bag' },
-  { label: 'Fun', value: 'Entertainment', icon: 'party-popper' },
-  { label: 'Health', value: 'Health', icon: 'heart' },
-  { label: 'Other', value: 'Other', icon: 'circle-dot' },
-];
+const EXPENSE_DEFAULTS: AiSuggestion[] = DEFAULT_EXPENSE_CATEGORIES.map((c) => ({
+  label: formatCategoryChip(c.name, c.stableKey),
+  value: c.name,
+  icon: iconKeyForStable(c.stableKey),
+}));
 
-const INCOME_DEFAULTS: AiSuggestion[] = [
-  { label: 'Salary', value: 'Salary', icon: 'briefcase' },
-  { label: 'Freelance', value: 'Freelance', icon: 'laptop' },
-  { label: 'Bonus', value: 'Bonus', icon: 'gift' },
-  { label: 'Gift', value: 'Gift', icon: 'sparkles' },
-  { label: 'Other', value: 'Other', icon: 'circle-dot' },
-];
+const INCOME_DEFAULTS: AiSuggestion[] = DEFAULT_INCOME_CATEGORIES.map((c) => ({
+  label: formatCategoryChip(c.name, c.stableKey),
+  value: c.name,
+  icon: iconKeyForStable(c.stableKey),
+}));
+
+function iconKeyForStable(stableKey: string): string {
+  const map: Record<string, string> = {
+    groceries: 'utensils',
+    food_drinks: 'utensils',
+    housing: 'home',
+    bills: 'zap',
+    transport: 'car',
+    shopping: 'shopping-bag',
+    entertainment: 'party-popper',
+    health: 'heart',
+    education: 'book',
+    travel: 'plane',
+    gifts: 'gift',
+    family: 'users',
+    loans_debts: 'banknote',
+    other: 'circle-dot',
+    salary: 'briefcase',
+    freelance: 'laptop',
+    bonus: 'sparkles',
+    gift_income: 'gift',
+    other_income: 'circle-dot',
+  };
+  return map[stableKey] ?? 'tag';
+}
 
 const ICON_BY_NAME: Record<string, string> = {
   food: 'utensils',
   groceries: 'utensils',
+  'food & drinks': 'utensils',
   coffee: 'coffee',
   clothes: 'shopping-bag',
   clothing: 'shopping-bag',
@@ -45,12 +68,18 @@ const ICON_BY_NAME: Record<string, string> = {
   freelance: 'laptop',
   bonus: 'gift',
   gift: 'gift',
+  gifts: 'gift',
+  bills: 'zap',
+  education: 'book',
+  travel: 'plane',
+  family: 'users',
+  'loans & debts': 'banknote',
   subscriptions: 'repeat',
   other: 'circle-dot',
 };
 
 export function iconForCategory(name: string): string {
-  return ICON_BY_NAME[name.trim().toLowerCase()] ?? 'tag';
+  return ICON_BY_NAME[stripCategoryEmoji(name).trim().toLowerCase()] ?? 'tag';
 }
 
 export function buildCategorySuggestions(
@@ -62,19 +91,22 @@ export function buildCategorySuggestions(
   const fromLedger = context.categories
     .filter((c) => c.type === entryType)
     .map((c) => ({
-      label: c.name,
-      value: c.name,
+      label: formatCategoryChip(c.name),
+      value: stripCategoryEmoji(c.name) || c.name,
       icon: iconForCategory(c.name),
     }));
 
   const fromHints = extraHints
     .map((h) => h.trim())
     .filter(Boolean)
-    .map((h) => ({
-      label: h,
-      value: h,
-      icon: iconForCategory(h),
-    }));
+    .map((h) => {
+      const mapped = matchDefaultCategoryHint(h, entryType) ?? stripCategoryEmoji(h) ?? h;
+      return {
+        label: formatCategoryChip(mapped),
+        value: mapped,
+        icon: iconForCategory(mapped),
+      };
+    });
 
   const merged = [...fromHints, ...fromLedger, ...defaults];
   const seen = new Set<string>();
@@ -84,7 +116,7 @@ export function buildCategorySuggestions(
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(item);
-    if (unique.length >= 8) break;
+    if (unique.length >= 10) break;
   }
   return unique;
 }
@@ -476,15 +508,15 @@ export const AI_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'create_space',
-      description: 'Create a new space (project, family, company, or personal) and switch to it.',
+      description: 'Create a new space (personal, household, shared, project, family, or company) and switch to it.',
       parameters: {
         type: 'object',
         properties: {
           name: { type: 'string' },
           type: {
             type: 'string',
-            enum: ['personal', 'project', 'family', 'company'],
-            description: 'Space type (default project)',
+            enum: ['personal', 'household', 'shared', 'project', 'family', 'company'],
+            description: 'Space type (default shared)',
           },
           currency: { type: 'string', description: 'ISO currency; defaults to active space currency' },
         },
@@ -1012,19 +1044,33 @@ export async function runAiTool(
         return { ok: false, error: 'amount must be a positive number' };
       }
       const entryType = name === 'add_income' ? 'income' : 'expense';
-      const category = asString(args.category);
+      const rawCategory = asString(args.category);
       const note = asString(args.note);
       const when = asString(args.when);
 
-      if (!category) {
+      if (!rawCategory) {
         return queueAskCategory(actions, context, entryType, amount, when, [], note);
       }
 
+      const mapped =
+        matchDefaultCategoryHint(rawCategory, entryType) ??
+        stripCategoryEmoji(rawCategory) ??
+        rawCategory;
+      const category = mapped;
+
       const existing = context.categories.find(
-        (c) => c.type === entryType && c.name.toLowerCase() === category.toLowerCase(),
+        (c) =>
+          c.type === entryType &&
+          (stripCategoryEmoji(c.name).toLowerCase() === category.toLowerCase() ||
+            c.name.toLowerCase() === category.toLowerCase() ||
+            c.name.toLowerCase() === rawCategory.toLowerCase()),
       );
       if (!existing) {
-        actions.push({ type: 'create_category', name: category, categoryType: entryType });
+        // Prefer mapping onto a default name rather than inventing a near-duplicate.
+        const looksDefault = Boolean(matchDefaultCategoryHint(category, entryType));
+        if (!looksDefault) {
+          actions.push({ type: 'create_category', name: category, categoryType: entryType });
+        }
       }
 
       actions.push({
@@ -1338,14 +1384,16 @@ export async function runAiTool(
     case 'create_space': {
       const nameValue = asString(args.name);
       if (!nameValue) return { ok: false, error: 'name is required' };
-      const typeRaw = asString(args.type) ?? 'project';
-      const spaceType =
-        typeRaw === 'personal' ||
-        typeRaw === 'family' ||
-        typeRaw === 'company' ||
-        typeRaw === 'project'
-          ? typeRaw
-          : 'project';
+      const typeRaw = asString(args.type) ?? 'shared';
+      const allowed = new Set([
+        'personal',
+        'household',
+        'shared',
+        'project',
+        'family',
+        'company',
+      ]);
+      const spaceType = allowed.has(typeRaw) ? typeRaw : 'shared';
       const currency = asString(args.currency)?.toUpperCase() ?? context.currency;
       actions.push({ type: 'create_space', name: nameValue, spaceType, currency });
       return {
@@ -1490,19 +1538,19 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     `1) Amounts without an explicit foreign currency code are already in ${context.currency}. Do NOT call convert_currency for them.`,
     `2) Only call convert_currency when the user names a currency code different from ${context.currency}.`,
     '3) If amount has no category, you MUST call ask_for_category (UI shows chips). Never ask for category in free text only.',
-    '4) If category is already clear (e.g. “on coffee”), call add_expense/add_income with that category.',
-    '5) When the user asks to create a category, call create_category — do not only acknowledge in chat.',
+    '4) If category is already clear from the user wording, call add_expense/add_income with the matching default category name. Default expense categories (short UI labels; use these exact names): Groceries, Food & Drinks, Housing, Bills, Transport, Shopping, Entertainment, Health, Education, Travel, Gifts, Family, Loans & Debts, Other. Map hints like coffee/restaurant→Food & Drinks, rent→Housing, uber/fuel→Transport, pharmacy→Health. If you are unsure, ask_for_category instead of inventing a new category.',
+    '5) When the user asks to create a category, call create_category — custom categories stay private to the active space. Do not only acknowledge in chat.',
     '5b) Rename with rename_category; remove with delete_category (entries become uncategorized).',
     '6) Notes are optional after save — do not block saving on a note.',
     'Savings goals (duration-based): preview with plan_goal, then create_goal after confirm. Log progress with update_goal(savedAmount=…).',
     'Editing / removing: “change the last note/amount” → update_entry; “delete/undo that spend” → delete_entry; “hide it” → hide_entry.',
     'Recurring: “my salary is 3000 on the 1st” → create_recurring; pause/delete with update_recurring / delete_recurring.',
-    'Spaces: “create a Family space” → create_space; “switch to Work” → switch_space; “invite alex@…” → invite_member.',
+    'Spaces: “create a Family space” → create_space(type=household|shared|family); “switch to Work” → switch_space; “invite alex@…” → invite_member. Space creation is not plan-limited.',
     'Use tools for ledger facts. Do not invent balances or FX rates.',
     `Amounts the ledger stores are in ${context.currency} major units.`,
     'No investment, tax, or lending advice.',
     `Active space: ${context.spaceName}. Currency: ${context.currency}. Always format money as ${context.currency}, never assume USD.`,
-    `Categories: ${cats || 'none yet'}.`,
+    `Categories in this space (defaults + customs): ${cats || 'none yet'}.`,
     `Current totals — income ${formatMinor(context.totals.incomeMinor, context.currency)}, expenses ${formatMinor(context.totals.expenseMinor, context.currency)}, net ${formatMinor(context.totals.netMinor, context.currency)}.`,
     recentLines ? `Recent entries:\n${recentLines}` : 'Recent entries: none.',
     goalLines ? `Goals:\n${goalLines}` : 'Goals: none.',

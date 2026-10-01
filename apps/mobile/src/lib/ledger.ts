@@ -1,4 +1,5 @@
 import type { Goal, LedgerTransaction, SpaceRole } from '@clear-money/domain';
+import { defaultCategoryRows } from '@clear-money/domain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
 import { getPersonalSpaceId, setPersonalSpaceId } from './session';
@@ -11,6 +12,8 @@ export type MobileCategory = {
   id: string;
   name: string;
   type: 'income' | 'expense';
+  spaceId?: string | null;
+  stableKey?: string | null;
 };
 
 export type MobileSpace = {
@@ -70,6 +73,8 @@ type ApiCategory = {
   id: string;
   name: string;
   type: string;
+  spaceId?: string | null;
+  stableKey?: string | null;
 };
 
 type ApiTxn = {
@@ -193,7 +198,19 @@ export async function emptyGuestLedger(): Promise<MobileLedger> {
   const currency = setup.currency || 'USD';
   const cached = await loadCachedLedger();
   if (cached?.userId === 'guest' && cached.spaces.length) {
-    return { ...cached, offline: true };
+    const defaults = defaultCategoryRows().map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      spaceId: null as string | null,
+      stableKey: c.stableKey,
+    }));
+    const have = new Set(cached.categories.map((c) => c.stableKey ?? c.id));
+    const missing = defaults.filter((d) => !have.has(d.stableKey) && !have.has(d.id));
+    if (!missing.length) return { ...cached, offline: true };
+    const next = { ...cached, categories: [...missing, ...cached.categories], offline: true };
+    await saveCachedLedger(next);
+    return next;
   }
   const id = `guest_space_${currency}`;
   const ledger: MobileLedger = {
@@ -203,7 +220,13 @@ export async function emptyGuestLedger(): Promise<MobileLedger> {
     plan: 'free',
     activeSpaceId: id,
     spaces: [{ id, name: 'Personal', currency, role: 'owner', type: 'personal' }],
-    categories: [],
+    categories: defaultCategoryRows().map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      spaceId: null,
+      stableKey: c.stableKey,
+    })),
     transactions: [],
     goals: [],
     recurring: [],
@@ -283,7 +306,13 @@ export async function hydrateLedger(): Promise<MobileLedger> {
     .filter((c): c is ApiCategory & { type: 'income' | 'expense' } =>
       c.type === 'income' || c.type === 'expense',
     )
-    .map((c) => ({ id: c.id, name: c.name, type: c.type }));
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      spaceId: c.spaceId ?? null,
+      stableKey: c.stableKey ?? null,
+    }));
 
   const transactions: LedgerTransaction[] = [];
   const goals: Goal[] = [];
@@ -475,13 +504,36 @@ export async function updateTransaction(
 export async function createCategory(input: {
   name: string;
   type: 'income' | 'expense';
+  spaceId?: string;
 }): Promise<MobileCategory> {
+  const spaceId = input.spaceId || (await getActiveSpaceId());
+  if (!spaceId) throw new Error('No active space');
+  const cached = await loadCachedLedger();
+  if (cached?.userId === 'guest') {
+    const row: MobileCategory = {
+      id: `guest_cat_${Date.now()}`,
+      name: input.name.trim(),
+      type: input.type,
+      spaceId,
+      stableKey: null,
+    };
+    const next = { ...cached, categories: [...cached.categories, row] };
+    await saveCachedLedger(next);
+    return row;
+  }
   const res = await apiFetch('/categories', {
     method: 'POST',
-    body: JSON.stringify({ name: input.name.trim(), type: input.type }),
+    body: JSON.stringify({ name: input.name.trim(), type: input.type, spaceId }),
   });
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as MobileCategory;
+  const created = (await res.json()) as MobileCategory;
+  if (cached) {
+    await saveCachedLedger({
+      ...cached,
+      categories: [...cached.categories, created],
+    });
+  }
+  return created;
 }
 
 export async function renameCategory(id: string, name: string): Promise<MobileCategory> {

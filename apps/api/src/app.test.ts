@@ -105,7 +105,7 @@ describe('api domain contracts', () => {
     expect(a.startsWith('idem_')).toBe(true);
   });
 
-  it('free plan allows two spaces then blocks a third', () => {
+  it('free plan allows unlimited spaces', () => {
     expect(
       canCreateSpace({
         plan: 'free',
@@ -123,7 +123,7 @@ describe('api domain contracts', () => {
         usage: { receiptScans: 0, aiRequests: 0, generatedReports: 0, activeMembers: 2 },
         limits: defaultLimitsForPlan('free'),
       }).ok,
-    ).toBe(false);
+    ).toBe(true);
     expect(defaultLimitsForPlan('free').activeMembers).toBe(2);
   });
 

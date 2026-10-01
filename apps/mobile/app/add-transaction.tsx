@@ -4,7 +4,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createIdempotencyKey,
-  parseDisplayAmount,
+  formatCategoryChip,
+  parseAmountInput,
   type CurrencyCode,
 } from '@clear-money/domain';
 import { t } from '../src/lib/i18n';
@@ -21,6 +22,8 @@ import { offlineQueue } from '../src/offline/client';
 import { useToast } from '../src/components/Toast';
 import { useThemeColors } from '../src/theme/ThemeContext';
 import { radius, space } from '../src/theme/tokens';
+
+const OPS = ['+', '−', '×', '÷'] as const;
 
 function toLocalInputValue(date = new Date()) {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -56,7 +59,12 @@ export default function AddTransactionModal() {
   }, []);
 
   const categories = useMemo(
-    () => (ledger?.categories ?? []).filter((c) => c.type === type),
+    () =>
+      (ledger?.categories ?? []).filter(
+        (c) =>
+          c.type === type &&
+          (c.spaceId == null || c.spaceId === ledger?.activeSpaceId),
+      ),
     [ledger, type],
   );
 
@@ -70,9 +78,11 @@ export default function AddTransactionModal() {
   const currency = activeSpace?.currency ?? 'USD';
 
   async function createCategory(name: string): Promise<MobileCategory | null> {
+    const spaceId = ledger?.activeSpaceId;
+    if (!spaceId) return null;
     const res = await apiFetch('/categories', {
       method: 'POST',
-      body: JSON.stringify({ name, type }),
+      body: JSON.stringify({ name, type, spaceId }),
     });
     if (!res.ok) return null;
     const row = (await res.json()) as MobileCategory;
@@ -98,16 +108,33 @@ export default function AddTransactionModal() {
           <Text style={[styles.currency, { color: colors.inkMuted }]}>{currency}</Text>
           <TextInput
             accessibilityLabel={t(locale, 'txn.amount')}
-            keyboardType="decimal-pad"
+            keyboardType="numbers-and-punctuation"
             value={amount}
-            onChangeText={setAmount}
-            placeholder="0.00"
+            onChangeText={(text) => setAmount(text.replace(/[^0-9.+\-×÷x*/]/gi, ''))}
+            placeholder="0 or 12+3.5"
             placeholderTextColor={colors.inkMuted}
             style={[
               styles.amount,
               { color: type === 'expense' ? colors.expense : colors.income },
             ]}
           />
+          <View style={styles.ops}>
+            {OPS.map((op) => (
+              <Pressable
+                key={op}
+                onPress={() => {
+                  setAmount((prev) => {
+                    if (!prev) return prev;
+                    if (/[+\-−×÷*/x]$/i.test(prev)) return `${prev.slice(0, -1)}${op}`;
+                    return `${prev}${op}`;
+                  });
+                }}
+                style={[styles.opBtn, { backgroundColor: colors.brandTint }]}
+              >
+                <Text style={{ color: colors.brand, fontWeight: '700', fontSize: 18 }}>{op}</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
 
         <View style={[styles.tabs, { backgroundColor: colors.canvas }]}>
@@ -163,7 +190,9 @@ export default function AddTransactionModal() {
                 },
               ]}
             >
-              <Text style={{ color: categoryId === c.id ? colors.brand : colors.ink }}>{c.name}</Text>
+              <Text style={{ color: categoryId === c.id ? colors.brand : colors.ink }}>
+                {formatCategoryChip(c.name, c.stableKey)}
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -226,7 +255,7 @@ export default function AddTransactionModal() {
               setSaving(true);
               setError(null);
               try {
-                const amountMinor = Math.abs(parseDisplayAmount(amount || '0', currency as CurrencyCode));
+                const amountMinor = Math.abs(parseAmountInput(amount || '0', currency as CurrencyCode));
                 if (amountMinor <= 0) {
                   setError(t(locale, 'txn.enterAmount'));
                   return;
@@ -289,9 +318,17 @@ const styles = StyleSheet.create({
   content: { padding: space[6], gap: space[4], paddingBottom: space[12] },
   title: { fontSize: 24, fontWeight: '600' },
   sub: { fontSize: 14, marginTop: -8 },
-  hero: { borderRadius: 20, padding: space[4] },
+  hero: { borderRadius: 20, padding: space[4], gap: space[3] },
   currency: { fontSize: 13, fontWeight: '600' },
   amount: { fontSize: 40, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  ops: { flexDirection: 'row', gap: space[2] },
+  opBtn: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabs: { flexDirection: 'row', borderRadius: radius.control, padding: 4, gap: 4 },
   tab: {
     flex: 1,

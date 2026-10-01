@@ -57,8 +57,8 @@ export interface EntitlementContext {
   };
 }
 
-/** Free forever: 1 personal + 1 shared space. */
-export const FREE_MAX_SPACES = 2;
+/** @deprecated Spaces are unlimited on free; kept for older callers. */
+export const FREE_MAX_SPACES = Number.POSITIVE_INFINITY;
 
 const PLAN_FEATURES: Record<PlanId, FeatureFlag[]> = {
   // Habit + 2-person share free. OCR / PDF / AI volume / large groups are Plus.
@@ -129,14 +129,8 @@ export function planHasFeature(plan: PlanId, feature: FeatureFlag): boolean {
   return PLAN_FEATURES[plan]?.includes(feature) ?? false;
 }
 
-export function canCreateSpace(ctx: EntitlementContext): { ok: boolean; reason?: string } {
-  if (planHasFeature(ctx.plan, 'unlimited_spaces')) return { ok: true };
-  if (ctx.totalSpaceCount >= FREE_MAX_SPACES) {
-    return {
-      ok: false,
-      reason: 'Free includes one personal and one shared space. Plus unlocks more spaces.',
-    };
-  }
+export function canCreateSpace(_ctx: EntitlementContext): { ok: boolean; reason?: string } {
+  // Spaces are not plan-gated — create as many personal / household / shared spaces as needed.
   return { ok: true };
 }
 

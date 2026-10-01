@@ -17,6 +17,7 @@ import {
   canInviteMember,
   canUseFeature,
   defaultLimitsForPlan,
+  defaultCategoryRows,
   maxActiveGoalsForPlan,
   requiresConfirmation,
   filterVisibleEntries,
@@ -451,6 +452,26 @@ export function createApp() {
     if (spaceId && !allowed.has(spaceId)) {
       return c.json({ error: 'Not a member of this Space' }, 403);
     }
+
+    // Ensure global default catalog exists (idempotent by stableKey).
+    const existingDefaults = await db()
+      .select()
+      .from(categories)
+      .where(isNull(categories.spaceId));
+    const have = new Set(existingDefaults.map((r) => r.stableKey));
+    const missing = defaultCategoryRows().filter((row) => !have.has(row.stableKey));
+    if (missing.length) {
+      await db().insert(categories).values(
+        missing.map((row) => ({
+          id: row.id,
+          spaceId: null,
+          stableKey: row.stableKey,
+          name: row.name,
+          type: row.type,
+        })),
+      );
+    }
+
     const rows = await db().select().from(categories);
     const visible = rows.filter(
       (row) =>
@@ -467,8 +488,10 @@ export function createApp() {
       type: 'income' | 'expense';
       spaceId?: string | null;
     }>();
-    const spaceId = body.spaceId ?? null;
-    if (spaceId) await requirePermission(userId, spaceId, 'create');
+    // Custom categories are always space-scoped so they stay personal to that space.
+    const spaceId = body.spaceId?.trim() || null;
+    if (!spaceId) return c.json({ error: 'spaceId is required for custom categories' }, 400);
+    await requirePermission(userId, spaceId, 'create');
     const name = body.name.trim();
     if (!name) return c.json({ error: 'Name required' }, 400);
     const id = createId('cat');
@@ -480,7 +503,7 @@ export function createApp() {
       name,
       type: body.type,
     });
-    return c.json({ id, name, type: body.type, spaceId }, 201);
+    return c.json({ id, name, type: body.type, spaceId, stableKey }, 201);
   });
 
   app.patch('/categories/:id', async (c) => {
@@ -518,18 +541,24 @@ export function createApp() {
   app.post('/spaces', async (c) => {
     const userId = c.get('userId');
     const body = await c.req.json<{ name: string; type: string; currency?: string }>();
-    const allowedSpaceTypes = new Set(['personal', 'project', 'family', 'company']);
+    const allowedSpaceTypes = new Set([
+      'personal',
+      'household',
+      'shared',
+      'project',
+      'family',
+      'company',
+    ]);
     if (!body.name?.trim()) {
       return c.json({ error: 'name is required' }, 400);
     }
     if (!allowedSpaceTypes.has(body.type)) {
       return c.json(
-        { error: 'type must be personal, project, family, or company' },
+        { error: 'type must be personal, household, shared, project, family, or company' },
         400,
       );
     }
     const profile = (await db().select().from(user).where(eq(user.id, userId)).limit(1))[0]!;
-    // Count spaces this user owns (personal allotment), not every membership.
     const owned = await db()
       .select({ id: spaces.id, type: spaces.type })
       .from(spaces)
@@ -544,10 +573,6 @@ export function createApp() {
     });
     if (!decision.ok) {
       return c.json({ error: decision.reason }, 402);
-    }
-    // Free: prefer personal first, then one shared-style space (project/family/company).
-    if (profile.plan === 'free' && body.type === 'personal' && personalSpaceCount >= 1) {
-      return c.json({ error: 'Free already includes one personal space. Create a shared space to invite someone.' }, 402);
     }
 
     const id = createId('space');

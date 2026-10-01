@@ -76,6 +76,101 @@ export function compareMoney(a: Money, b: Money): number {
   return a.amountMinor - b.amountMinor;
 }
 
+/**
+ * Evaluate a simple calculator expression (+ − × ÷). Supports `x`/`*` and `÷`/`/`.
+ * Uses * / before + -; returns a plain decimal string (no trailing junk zeros beyond 6 places).
+ */
+export function evaluateAmountExpression(input: string): string {
+  const normalized = input
+    .trim()
+    .replace(/,/g, '.')
+    .replace(/[x×]/gi, '*')
+    .replace(/[÷]/g, '/')
+    .replace(/[−–—]/g, '-')
+    .replace(/\s+/g, '');
+  if (!normalized) throw new Error('Invalid amount');
+  if (!/^-?[\d.]+(?:[+\-*/]-?[\d.]+)*$/.test(normalized)) {
+    throw new Error('Invalid amount');
+  }
+
+  const tokens: Array<number | '+' | '-' | '*' | '/'> = [];
+  let i = 0;
+  while (i < normalized.length) {
+    const ch = normalized[i]!;
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+      // Unary minus / plus at start or after an operator
+      if (
+        (ch === '+' || ch === '-') &&
+        (tokens.length === 0 || typeof tokens[tokens.length - 1] !== 'number')
+      ) {
+        let j = i + 1;
+        while (j < normalized.length && /[\d.]/.test(normalized[j]!)) j += 1;
+        const num = Number(normalized.slice(i, j));
+        if (!Number.isFinite(num)) throw new Error('Invalid amount');
+        tokens.push(num);
+        i = j;
+        continue;
+      }
+      tokens.push(ch);
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < normalized.length && /[\d.]/.test(normalized[j]!)) j += 1;
+    const num = Number(normalized.slice(i, j));
+    if (!Number.isFinite(num)) throw new Error('Invalid amount');
+    tokens.push(num);
+    i = j;
+  }
+
+  const apply = (a: number, op: '+' | '-' | '*' | '/', b: number): number => {
+    if (op === '+') return a + b;
+    if (op === '-') return a - b;
+    if (op === '*') return a * b;
+    if (b === 0) throw new Error('Cannot divide by zero');
+    return a / b;
+  };
+
+  // * and / first
+  const mulDiv: Array<number | '+' | '-'> = [];
+  let idx = 0;
+  while (idx < tokens.length) {
+    const tok = tokens[idx]!;
+    if (tok === '*' || tok === '/') {
+      const left = mulDiv.pop();
+      const right = tokens[idx + 1];
+      if (typeof left !== 'number' || typeof right !== 'number') {
+        throw new Error('Invalid amount');
+      }
+      mulDiv.push(apply(left, tok, right));
+      idx += 2;
+      continue;
+    }
+    if (tok === '+' || tok === '-') {
+      mulDiv.push(tok);
+      idx += 1;
+      continue;
+    }
+    mulDiv.push(tok);
+    idx += 1;
+  }
+
+  let result = mulDiv[0];
+  if (typeof result !== 'number') throw new Error('Invalid amount');
+  for (let k = 1; k < mulDiv.length; k += 2) {
+    const op = mulDiv[k];
+    const right = mulDiv[k + 1];
+    if ((op !== '+' && op !== '-') || typeof right !== 'number') {
+      throw new Error('Invalid amount');
+    }
+    result = apply(result, op, right);
+  }
+
+  if (!Number.isFinite(result)) throw new Error('Invalid amount');
+  const rounded = Math.round(result * 1_000_000) / 1_000_000;
+  return String(rounded);
+}
+
 /** Parse a display string into minor units using currency decimal places. No rounding of stored values. */
 export function parseDisplayAmount(display: string, currency: CurrencyCode): number {
   const cleaned = display.replace(/[^\d.-]/g, '');
@@ -95,6 +190,17 @@ export function parseDisplayAmount(display: string, currency: CurrencyCode): num
     throw new Error('Invalid amount');
   }
   return negative ? -minor : minor;
+}
+
+/** Parse amount fields that may include a quick + − × ÷ expression. */
+export function parseAmountInput(display: string, currency: CurrencyCode): number {
+  const trimmed = display.trim();
+  if (!trimmed) throw new Error('Invalid amount');
+  const hasOps = /[+\-*/x×÷]/i.test(trimmed.slice(1)) || /[*/x×÷]/i.test(trimmed);
+  if (hasOps || /[+\-]/.test(trimmed.slice(1))) {
+    return parseDisplayAmount(evaluateAmountExpression(trimmed), currency);
+  }
+  return parseDisplayAmount(trimmed, currency);
 }
 
 export function formatMinorUnits(

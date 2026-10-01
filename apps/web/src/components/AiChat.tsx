@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import {
   currencyDecimalPlaces,
+  matchDefaultCategoryHint,
   monthlyTargetMinor,
   parseDisplayAmount,
+  stripCategoryEmoji,
   type CurrencyCode,
   type LedgerTransaction,
 } from '@clear-money/domain';
@@ -255,11 +257,27 @@ async function applyImmediateActions(
   let goalsCreated = 0;
   let lastGoalName: string | null = null;
 
-  const resolveId = (name: string | undefined, type: 'income' | 'expense') => {
+  const resolveId = (
+    name: string | undefined,
+    type: 'income' | 'expense',
+    opts?: { mapDefaults?: boolean },
+  ) => {
     if (!name) return null;
+    const mapped =
+      opts?.mapDefaults === false
+        ? stripCategoryEmoji(name)
+        : matchDefaultCategoryHint(name, type) ?? stripCategoryEmoji(name);
+    const needle = (mapped || name).toLowerCase();
     return (
-      categories.find((c) => c.type === type && c.name.toLowerCase() === name.toLowerCase())?.id ??
-      null
+      categories.find((c) => {
+        if (c.type !== type) return false;
+        const cleaned = stripCategoryEmoji(c.name).toLowerCase();
+        return (
+          c.name.toLowerCase() === needle ||
+          cleaned === needle ||
+          cleaned === name.toLowerCase()
+        );
+      })?.id ?? null
     );
   };
 
@@ -275,7 +293,7 @@ async function applyImmediateActions(
       continue;
     }
     if (action.type === 'create_category') {
-      if (!resolveId(action.name, action.categoryType)) {
+      if (!resolveId(action.name, action.categoryType, { mapDefaults: false })) {
         const created = helpers.addCategory({ name: action.name, type: action.categoryType });
         categories = [...categories, created];
         applied += 1;
@@ -589,7 +607,9 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       currency: space.currency,
       spaceName: space.name,
       spaceId: space.id,
-      categories: state.categories.map((c) => ({ id: c.id, name: c.name, type: c.type })),
+      categories: state.categories
+        .filter((c) => c.spaceId == null || c.spaceId === space.id)
+        .map((c) => ({ id: c.id, name: c.name, type: c.type })),
       totals: {
         incomeMinor: totals.incomeMinor,
         expenseMinor: totals.expenseMinor,

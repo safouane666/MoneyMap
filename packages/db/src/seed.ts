@@ -1,7 +1,7 @@
 import { config as loadEnv } from 'dotenv';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createId } from '@clear-money/domain';
+import { createId, defaultCategoryRows } from '@clear-money/domain';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq } from 'drizzle-orm';
 import { createDb } from './client.js';
@@ -169,15 +169,19 @@ async function main() {
     { id: createId('mem'), spaceId: companyId, userId: memberId, role: 'admin' },
   ]);
 
+  await db.insert(categories).values(
+    defaultCategoryRows().map((c) => ({
+      id: c.id,
+      spaceId: null,
+      stableKey: c.stableKey,
+      name: c.name,
+      type: c.type,
+    })),
+  );
+
   const catGroceries = 'cat_groceries';
   const catSalary = 'cat_salary';
   const catTransport = 'cat_transport';
-
-  await db.insert(categories).values([
-    { id: catGroceries, spaceId: null, stableKey: 'groceries', name: 'Groceries', type: 'expense' },
-    { id: catSalary, spaceId: null, stableKey: 'salary', name: 'Salary', type: 'income' },
-    { id: catTransport, spaceId: null, stableKey: 'transport', name: 'Transport', type: 'expense' },
-  ]);
 
   const now = new Date();
   const mkTxn = (

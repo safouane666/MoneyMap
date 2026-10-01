@@ -155,6 +155,7 @@ type ApiCategory = {
   name: string;
   type: 'income' | 'expense' | string;
   spaceId?: string | null;
+  stableKey?: string | null;
 };
 
 type ApiTxn = {
@@ -416,6 +417,8 @@ async function loadLedgerFromApi(): Promise<{ state: DemoState; sessionUser: Ses
       id: c.id,
       name: c.name,
       type: c.type as 'income' | 'expense',
+      spaceId: c.spaceId ?? null,
+      stableKey: c.stableKey ?? null,
     }));
 
   return {
@@ -917,7 +920,10 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const addCategory = useCallback(
     (input: { name: string; type: 'income' | 'expense' }) => {
       if (offlineRef.current) {
-        const result = addDemoCategory(stateRef.current, input);
+        const result = addDemoCategory(stateRef.current, {
+          ...input,
+          spaceId: stateRef.current.activeSpaceId,
+        });
         commit(result.state);
         return result.category;
       }
@@ -925,6 +931,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         id: createId('cat'),
         name: input.name.trim(),
         type: input.type,
+        spaceId: stateRef.current.activeSpaceId,
       };
       commit({
         ...stateRef.current,
@@ -945,6 +952,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
             id: result.data.id,
             name: result.data.name,
             type: result.data.type as 'income' | 'expense',
+            spaceId: result.data.spaceId ?? stateRef.current.activeSpaceId,
+            stableKey: result.data.stableKey ?? null,
           };
           const current = stateRef.current;
           commit({

@@ -3,7 +3,9 @@
  */
 import {
   currencyDecimalPlaces,
+  matchDefaultCategoryHint,
   parseDisplayAmount,
+  stripCategoryEmoji,
   type CurrencyCode,
 } from '@clear-money/domain';
 import { hideTxnId } from './hidden-txns';
@@ -141,18 +143,43 @@ export async function applyPennyActions(
   let pendingAsk: PennyAction | null = null;
   const reports: Array<{ title: string; body: string }> = [];
 
-  const resolveCat = (name: string | undefined, type: 'income' | 'expense') => {
+  const resolveCat = (
+    name: string | undefined,
+    type: 'income' | 'expense',
+    opts?: { mapDefaults?: boolean },
+  ) => {
     if (!name) return null;
+    const mapped =
+      opts?.mapDefaults === false
+        ? stripCategoryEmoji(name)
+        : matchDefaultCategoryHint(name, type) ?? stripCategoryEmoji(name);
+    const needle = (mapped || name).toLowerCase();
     return (
-      categories.find((c) => c.type === type && c.name.toLowerCase() === name.toLowerCase())?.id ??
-      null
+      categories.find((c) => {
+        if (c.type !== type) return false;
+        if (c.spaceId != null && c.spaceId !== spaceId) return false;
+        const cleaned = stripCategoryEmoji(c.name).toLowerCase();
+        return (
+          c.name.toLowerCase() === needle ||
+          cleaned === needle ||
+          cleaned === name.toLowerCase()
+        );
+      })?.id ?? null
     );
   };
 
-  const ensureCat = async (name: string, type: 'income' | 'expense') => {
-    let id = resolveCat(name, type);
+  const ensureCat = async (
+    name: string,
+    type: 'income' | 'expense',
+    opts?: { mapDefaults?: boolean },
+  ) => {
+    const mapDefaults = opts?.mapDefaults !== false;
+    const mapped = mapDefaults
+      ? matchDefaultCategoryHint(name, type) ?? stripCategoryEmoji(name) ?? name
+      : stripCategoryEmoji(name) || name;
+    let id = resolveCat(mapped, type, { mapDefaults }) ?? resolveCat(name, type, { mapDefaults });
     if (id) return id;
-    const created = await createCategory({ name, type });
+    const created = await createCategory({ name: mapped, type, spaceId });
     categories = [...categories, created];
     applied += 1;
     return created.id;
@@ -169,7 +196,9 @@ export async function applyPennyActions(
         continue;
       }
       if (action.type === 'create_category') {
-        await ensureCat(String(action.name), action.categoryType as 'income' | 'expense');
+        await ensureCat(String(action.name), action.categoryType as 'income' | 'expense', {
+          mapDefaults: false,
+        });
         continue;
       }
       if (action.type === 'rename_category') {

@@ -32,7 +32,7 @@ describe('parseMoneyUtterance', () => {
       entryType: 'expense',
       amount: 42,
       currencyCode: 'TND',
-      categoryHint: 'Food & Restaurants',
+      categoryHint: 'Food & Drinks',
       note: 'date with Baby',
     });
   });
@@ -57,7 +57,13 @@ describe('applyDeterministicLedgerFallback', () => {
     );
     expect(ok).toBe(true);
     expect(actions.some((a) => a.type === 'add_transaction')).toBe(true);
-    expect(actions.some((a) => a.type === 'create_category' && a.name === 'Coffee')).toBe(true);
+    const txn = actions.find((a) => a.type === 'add_transaction');
+    expect(txn).toMatchObject({
+      type: 'add_transaction',
+      category: 'Food & Drinks',
+    });
+    // Defaults should not invent a duplicate custom category
+    expect(actions.some((a) => a.type === 'create_category')).toBe(false);
   });
 
   it('records restaurant spend with note in one shot', async () => {
@@ -73,7 +79,7 @@ describe('applyDeterministicLedgerFallback', () => {
       type: 'add_transaction',
       entryType: 'expense',
       amountMajor: 42,
-      category: 'Food & Restaurants',
+      category: 'Food & Drinks',
       note: 'date with Baby',
     });
   });
@@ -136,7 +142,7 @@ describe('applyDeterministicLedgerFallback', () => {
     expect(txn).toMatchObject({
       type: 'add_transaction',
       amountMajor: 42,
-      category: 'Food & Restaurants',
+      category: 'Food & Drinks',
       note: 'date with Baby',
     });
   });

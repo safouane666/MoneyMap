@@ -12,7 +12,7 @@ import { createSpace } from '../lib/ledger';
 import { useThemeColors } from '../theme/ThemeContext';
 import { radius, space } from '../theme/tokens';
 
-const SPACE_TYPES = ['personal', 'project', 'family', 'company'] as const;
+const SPACE_TYPES = ['personal', 'household', 'shared'] as const;
 
 export function CreateSpaceModal({
   visible,
@@ -29,7 +29,7 @@ export function CreateSpaceModal({
 }) {
   const colors = useThemeColors();
   const [name, setName] = useState('');
-  const [type, setType] = useState<(typeof SPACE_TYPES)[number]>('project');
+  const [type, setType] = useState<(typeof SPACE_TYPES)[number]>('shared');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ export function CreateSpaceModal({
     try {
       const created = await createSpace({ name: name.trim(), type, currency });
       setName('');
-      setType('project');
+      setType('shared');
       onClose();
       onCreated?.(created.id);
     } catch (err) {

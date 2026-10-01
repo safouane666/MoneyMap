@@ -18,6 +18,9 @@ export interface DemoCategory {
   id: string;
   name: string;
   type: 'income' | 'expense';
+  /** null = global default; otherwise only visible in that space */
+  spaceId?: string | null;
+  stableKey?: string | null;
 }
 
 export type RecurringItem = {
@@ -263,12 +266,13 @@ export function unhideDemoTransaction(state: DemoState, id: string): DemoState {
 
 export function addDemoCategory(
   state: DemoState,
-  input: { name: string; type: 'income' | 'expense' },
+  input: { name: string; type: 'income' | 'expense'; spaceId?: string | null },
 ): { state: DemoState; category: DemoCategory } {
   const category: DemoCategory = {
     id: createId('cat'),
     name: input.name.trim(),
     type: input.type,
+    spaceId: input.spaceId ?? state.activeSpaceId ?? null,
   };
   return {
     category,
