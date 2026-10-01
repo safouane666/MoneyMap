@@ -29,6 +29,7 @@ import {
   removeDemoTransaction,
   restoreDemoTransaction,
   saveApiLedgerCache,
+  saveDemoState,
   setActiveSpace as setDemoActiveSpace,
   unhideDemoTransaction,
   updateDemoTransaction,
@@ -36,6 +37,7 @@ import {
   type DemoState,
   type RecurringItem,
 } from '@/lib/demo-state';
+import { ensureGuestPersonalSpace } from '@/lib/guest-migrate';
 
 export type { RecurringItem };
 
@@ -102,13 +104,20 @@ interface LedgerContextValue {
   ) => LedgerTransaction;
   updateTransaction: (
     id: string,
-    patch: { description?: string | null; categoryId?: string | null },
+    patch: {
+      description?: string | null;
+      categoryId?: string | null;
+      amountMinor?: number;
+      occurredAt?: string;
+    },
   ) => void;
   undoTransaction: (id: string) => void;
   restoreTransaction: (transaction: LedgerTransaction) => void;
   hideTransaction: (id: string) => void;
   unhideTransaction: (id: string) => void;
   addCategory: (input: { name: string; type: 'income' | 'expense' }) => DemoCategory;
+  renameCategory: (id: string, name: string) => void;
+  deleteCategory: (id: string) => void;
 }
 
 export type SessionUser = {
@@ -459,21 +468,27 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const commit = useCallback((next: DemoState, opts?: { persistCache?: boolean }) => {
     stateRef.current = next;
     setState(next);
-    if (opts?.persistCache || !offlineRef.current) {
+    if (offlineRef.current) {
+      // Guest / offline ledger must survive relaunch and account transfer.
+      saveDemoState(next);
+      return;
+    }
+    if (opts?.persistCache !== false) {
       saveApiLedgerCache(next);
     }
   }, []);
 
   const applyDemo = useCallback(() => {
     setSessionUser(null);
+    const currency = loadSetupSession().currency || 'USD';
     const cached = loadApiLedgerCache();
     if (cached?.spaces?.length) {
-      commit(cached, { persistCache: true });
+      commit(ensureGuestPersonalSpace(cached, currency), { persistCache: true });
       setOffline(true);
       offlineRef.current = true;
       return;
     }
-    const demo = loadDemoState();
+    const demo = ensureGuestPersonalSpace(loadDemoState(), currency);
     commit(demo);
     setOffline(true);
     offlineRef.current = true;
@@ -745,7 +760,15 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   );
 
   const updateTransaction = useCallback(
-    (id: string, patch: { description?: string | null; categoryId?: string | null }) => {
+    (
+      id: string,
+      patch: {
+        description?: string | null;
+        categoryId?: string | null;
+        amountMinor?: number;
+        occurredAt?: string;
+      },
+    ) => {
       if (offlineRef.current) {
         commit(updateDemoTransaction(stateRef.current, id, patch));
         return;
@@ -760,6 +783,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
                 ...t,
                 description: patch.description !== undefined ? patch.description : t.description,
                 categoryId: patch.categoryId !== undefined ? patch.categoryId : t.categoryId,
+                amountMinor: patch.amountMinor !== undefined ? patch.amountMinor : t.amountMinor,
+                occurredAt: patch.occurredAt !== undefined ? patch.occurredAt : t.occurredAt,
               }
             : t,
         ),
@@ -767,7 +792,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       if (!existing) return;
       void apiFetch(`/spaces/${existing.spaceId}/transactions/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(patch),
+        body: JSON.stringify({
+          ...(patch.description !== undefined ? { description: patch.description } : {}),
+          ...(patch.categoryId !== undefined ? { categoryId: patch.categoryId } : {}),
+          ...(patch.amountMinor !== undefined ? { amountMinor: patch.amountMinor } : {}),
+          ...(patch.occurredAt !== undefined ? { occurredAt: patch.occurredAt } : {}),
+        }),
       }).catch((error) => {
         showToast({
           message:
@@ -931,6 +961,50 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       return optimistic;
     },
     [commit],
+  );
+
+  const renameCategory = useCallback(
+    (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      commit({
+        ...stateRef.current,
+        categories: stateRef.current.categories.map((c) =>
+          c.id === id ? { ...c, name: trimmed } : c,
+        ),
+      });
+      if (offlineRef.current) return;
+      void apiFetch(`/categories/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: trimmed }),
+      }).catch((error) => {
+        showToast({
+          message:
+            error instanceof ApiError ? error.message : 'Could not rename category.',
+        });
+      });
+    },
+    [commit, showToast],
+  );
+
+  const deleteCategory = useCallback(
+    (id: string) => {
+      commit({
+        ...stateRef.current,
+        categories: stateRef.current.categories.filter((c) => c.id !== id),
+        transactions: stateRef.current.transactions.map((t) =>
+          t.categoryId === id ? { ...t, categoryId: null } : t,
+        ),
+      });
+      if (offlineRef.current) return;
+      void apiFetch(`/categories/${id}`, { method: 'DELETE' }).catch((error) => {
+        showToast({
+          message:
+            error instanceof ApiError ? error.message : 'Could not delete category.',
+        });
+      });
+    },
+    [commit, showToast],
   );
 
   const createGoal = useCallback(
@@ -1180,6 +1254,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       hideTransaction,
       unhideTransaction,
       addCategory,
+      renameCategory,
+      deleteCategory,
     }),
     [
       state,
@@ -1206,6 +1282,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       hideTransaction,
       unhideTransaction,
       addCategory,
+      renameCategory,
+      deleteCategory,
     ],
   );
 

@@ -111,6 +111,149 @@ export function createApp() {
     }),
   );
 
+  /**
+   * Native Google OAuth start (system browser).
+   * Sets Better Auth state cookies in THIS browser jar, then 302 → Google.
+   * Query: `to` = deep link (clearmoney://… / exp://…), optional `migrate=1`.
+   */
+  app.get('/public/mobile-google-oauth', async (c) => {
+    if (!config.googleClientId || !config.googleClientSecret) {
+      return c.json({ error: 'Google sign-in unavailable' }, 503);
+    }
+    const to = c.req.query('to')?.trim() || '';
+    if (
+      !to.startsWith('clearmoney://') &&
+      !to.startsWith('exp://') &&
+      !to.startsWith('exps://')
+    ) {
+      return c.json({ error: 'Invalid deep link' }, 400);
+    }
+    const migrate = c.req.query('migrate') === '1';
+
+    let publicOrigin: string;
+    try {
+      publicOrigin = new URL(config.authUrl).origin;
+    } catch {
+      publicOrigin = config.webUrl.replace(/\/$/, '');
+    }
+    const done = new URL(`${publicOrigin}/cm-api/public/mobile-google-done`);
+    done.searchParams.set('to', to);
+    if (migrate) done.searchParams.set('migrate', '1');
+
+    const auth = getAuth();
+    const upstream = await auth.handler(
+      new Request(`${publicOrigin}/cm-api/auth/sign-in/social`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: publicOrigin,
+        },
+        body: JSON.stringify({
+          provider: 'google',
+          callbackURL: done.toString(),
+        }),
+      }),
+    );
+
+    if (!upstream.ok) {
+      const detail = await upstream.text().catch(() => '');
+      return c.json(
+        { error: 'Google sign-in unavailable', detail: detail.slice(0, 200) },
+        502,
+      );
+    }
+
+    let data: { url?: string };
+    try {
+      data = (await upstream.json()) as { url?: string };
+    } catch {
+      return c.json({ error: 'Invalid auth response' }, 502);
+    }
+    if (!data.url) return c.json({ error: 'Google sign-in unavailable' }, 502);
+
+    let google: URL;
+    try {
+      google = new URL(data.url);
+    } catch {
+      return c.json({ error: 'Invalid Google URL' }, 502);
+    }
+    if (
+      google.hostname !== 'accounts.google.com' &&
+      !google.hostname.endsWith('.google.com')
+    ) {
+      return c.json({ error: 'Non-Google OAuth URL rejected' }, 502);
+    }
+
+    const headers = new Headers();
+    headers.set('Location', google.toString());
+    const setCookies =
+      typeof upstream.headers.getSetCookie === 'function'
+        ? upstream.headers.getSetCookie()
+        : [];
+    if (setCookies.length > 0) {
+      for (const cookie of setCookies) headers.append('Set-Cookie', cookie);
+    } else {
+      const single = upstream.headers.get('set-cookie');
+      if (single) headers.append('Set-Cookie', single);
+    }
+    return new Response(null, { status: 302, headers });
+  });
+
+  /** After Google → Better Auth: hand session cookie to the native deep link. */
+  app.get('/public/mobile-google-done', (c) => {
+    const to = c.req.query('to')?.trim() || 'clearmoney://auth/callback';
+    if (
+      !to.startsWith('clearmoney://') &&
+      !to.startsWith('exp://') &&
+      !to.startsWith('exps://')
+    ) {
+      return c.html(
+        `<!doctype html><html><body><p>Invalid return link.</p></body></html>`,
+        400,
+      );
+    }
+
+    const rawCookie = c.req.header('cookie') || '';
+    const secureMatch = rawCookie.match(
+      /(?:^|;\s*)__Secure-better-auth\.session_token=([^;]+)/,
+    );
+    const plainMatch = rawCookie.match(
+      /(?:^|;\s*)better-auth\.session_token=([^;]+)/,
+    );
+    const token = secureMatch?.[1] || plainMatch?.[1];
+    const cookieName = secureMatch
+      ? '__Secure-better-auth.session_token'
+      : 'better-auth.session_token';
+
+    if (!token) {
+      return c.html(
+        `<!doctype html><html><body style="font-family:system-ui;padding:2rem;text-align:center">
+          <p><strong>Sign-in did not finish</strong></p>
+          <p>No session cookie was found. Close this tab and try again from the app.</p>
+        </body></html>`,
+        401,
+      );
+    }
+
+    const base = to.split('?')[0] || to;
+    const qs = new URLSearchParams();
+    qs.set('session', `${cookieName}=${decodeURIComponent(token)}`);
+    if (c.req.query('migrate') === '1') qs.set('migrate', '1');
+    const href = `${base}?${qs.toString()}`;
+
+    return c.html(`<!doctype html><html><head><meta charset="utf-8"/>
+      <meta name="viewport" content="width=device-width,initial-scale=1"/>
+      <title>Opening Clear Money</title></head>
+      <body style="font-family:system-ui;padding:2rem;text-align:center;background:#F7F8FA;color:#111">
+        <p style="font-size:1.125rem;font-weight:600">Opening Clear Money…</p>
+        <p style="color:#666;font-size:0.875rem">You can close this tab after the app opens.</p>
+        <p style="margin-top:1.5rem"><a href="${href.replace(/"/g, '&quot;')}"
+          style="display:inline-block;background:#5B5CE2;color:#fff;padding:0.6rem 1rem;border-radius:10px;text-decoration:none;font-weight:600">Open app</a></p>
+        <script>try{location.replace(${JSON.stringify(href)})}catch(e){}
+        setTimeout(function(){try{location.href=${JSON.stringify(href)}}catch(e){}},400);</script>
+      </body></html>`);
+  });
+
   app.use('/cm-api/auth/*', async (c, next) => {
     if (!rateLimit(`auth:${c.req.header('x-forwarded-for') ?? 'local'}`, 30, 60_000)) {
       return c.json({ error: 'Rate limited' }, 429);
@@ -338,6 +481,38 @@ export function createApp() {
       type: body.type,
     });
     return c.json({ id, name, type: body.type, spaceId }, 201);
+  });
+
+  app.patch('/categories/:id', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const row = (await db().select().from(categories).where(eq(categories.id, id)).limit(1))[0];
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.spaceId) await requirePermission(userId, row.spaceId, 'create');
+    const body = await c.req.json<{ name?: string }>();
+    const name = body.name?.trim();
+    if (!name) return c.json({ error: 'Name required' }, 400);
+    const stableKey = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'cat'}_${id.slice(-6)}`;
+    await db()
+      .update(categories)
+      .set({ name, stableKey })
+      .where(eq(categories.id, id));
+    return c.json({ id, name, type: row.type, spaceId: row.spaceId });
+  });
+
+  app.delete('/categories/:id', async (c) => {
+    const userId = c.get('userId');
+    const id = c.req.param('id');
+    const row = (await db().select().from(categories).where(eq(categories.id, id)).limit(1))[0];
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.spaceId) await requirePermission(userId, row.spaceId, 'create');
+    // Detach transactions so FK does not block the delete.
+    await db()
+      .update(transactions)
+      .set({ categoryId: null, updatedAt: new Date() })
+      .where(eq(transactions.categoryId, id));
+    await db().delete(categories).where(eq(categories.id, id));
+    return c.json({ ok: true, id });
   });
 
   app.post('/spaces', async (c) => {
@@ -1422,7 +1597,11 @@ export function createApp() {
       description?: string | null;
       categoryId?: string | null;
       type?: string;
+      occurredAt?: string;
     }>();
+    if (body.occurredAt !== undefined && Number.isNaN(Date.parse(body.occurredAt))) {
+      return c.json({ error: 'occurredAt must be a valid ISO date' }, 400);
+    }
     await db()
       .update(transactions)
       .set({
@@ -1430,6 +1609,7 @@ export function createApp() {
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
         ...(body.type !== undefined ? { type: body.type } : {}),
+        ...(body.occurredAt !== undefined ? { occurredAt: new Date(body.occurredAt) } : {}),
         updatedAt: new Date(),
       })
       .where(eq(transactions.id, txnId));

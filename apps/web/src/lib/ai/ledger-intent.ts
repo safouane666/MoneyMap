@@ -34,6 +34,15 @@ export function looksLikeLedgerIntent(text: string): boolean {
   if (/\b(how much|summary|summarize|report|balance|totals?)\b/i.test(t)) {
     return true;
   }
+  if (
+    /\b(delete|remove|undo|hide)\b.+\b(expense|income|entry|transaction|spend|last)\b/i.test(t) ||
+    /\b(delete|remove|undo|hide)\b.+\blast\b/i.test(t)
+  ) {
+    return true;
+  }
+  if (/\b(goal|save for|savings)\b/i.test(t)) return true;
+  if (/\b(salary|subscription|recurring|bill)\b/i.test(t)) return true;
+  if (/\b(create|switch|new)\b.+\bspace\b/i.test(t) || /\binvite\b.+\b@/i.test(t)) return true;
   // Affirmations after a pending save ("yes", "add it once more")
   if (/^(yes|yeah|yep|ok|okay|sure|confirm|do it|save it|add it(?: once more)?)\b/i.test(t)) {
     return true;

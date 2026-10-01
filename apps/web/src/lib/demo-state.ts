@@ -210,7 +210,12 @@ export function addDemoTransaction(
 export function updateDemoTransaction(
   state: DemoState,
   id: string,
-  patch: { description?: string | null; categoryId?: string | null },
+  patch: {
+    description?: string | null;
+    categoryId?: string | null;
+    amountMinor?: number;
+    occurredAt?: string;
+  },
 ): DemoState {
   return {
     ...state,
@@ -220,6 +225,8 @@ export function updateDemoTransaction(
             ...t,
             description: patch.description !== undefined ? patch.description : t.description,
             categoryId: patch.categoryId !== undefined ? patch.categoryId : t.categoryId,
+            amountMinor: patch.amountMinor !== undefined ? patch.amountMinor : t.amountMinor,
+            occurredAt: patch.occurredAt !== undefined ? patch.occurredAt : t.occurredAt,
           }
         : t,
     ),

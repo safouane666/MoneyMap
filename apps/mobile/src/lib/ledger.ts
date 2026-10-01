@@ -359,6 +359,7 @@ export async function updateRecurring(
     amountMinor?: number;
     kind?: 'income' | 'expense';
     dayOfMonth?: number;
+    active?: boolean;
   },
 ): Promise<MobileRecurring> {
   const res = await apiFetch(`/spaces/${spaceId}/recurring/${id}`, {
@@ -434,6 +435,144 @@ export async function deleteTransaction(spaceId: string, id: string): Promise<vo
   }
   const res = await apiFetch(`/spaces/${spaceId}/transactions/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function updateTransaction(
+  spaceId: string,
+  id: string,
+  patch: {
+    description?: string | null;
+    categoryId?: string | null;
+    amountMinor?: number;
+    occurredAt?: string;
+  },
+): Promise<void> {
+  const cached = await loadCachedLedger();
+  if (cached?.userId === 'guest') {
+    await saveCachedLedger({
+      ...cached,
+      transactions: cached.transactions.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              description: patch.description !== undefined ? patch.description : t.description,
+              categoryId: patch.categoryId !== undefined ? patch.categoryId : t.categoryId,
+              amountMinor: patch.amountMinor !== undefined ? patch.amountMinor : t.amountMinor,
+              occurredAt: patch.occurredAt !== undefined ? patch.occurredAt : t.occurredAt,
+            }
+          : t,
+      ),
+    });
+    return;
+  }
+  const res = await apiFetch(`/spaces/${spaceId}/transactions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function createCategory(input: {
+  name: string;
+  type: 'income' | 'expense';
+}): Promise<MobileCategory> {
+  const res = await apiFetch('/categories', {
+    method: 'POST',
+    body: JSON.stringify({ name: input.name.trim(), type: input.type }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as MobileCategory;
+}
+
+export async function renameCategory(id: string, name: string): Promise<MobileCategory> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('Name required');
+  const cached = await loadCachedLedger();
+  if (cached?.userId === 'guest') {
+    const next = {
+      ...cached,
+      categories: cached.categories.map((c) => (c.id === id ? { ...c, name: trimmed } : c)),
+    };
+    await saveCachedLedger(next);
+    const cat = next.categories.find((c) => c.id === id);
+    if (!cat) throw new Error('Category not found');
+    return cat;
+  }
+  const res = await apiFetch(`/categories/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: trimmed }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as MobileCategory;
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  const cached = await loadCachedLedger();
+  if (cached?.userId === 'guest') {
+    await saveCachedLedger({
+      ...cached,
+      categories: cached.categories.filter((c) => c.id !== id),
+      transactions: cached.transactions.map((t) =>
+        t.categoryId === id ? { ...t, categoryId: null } : t,
+      ),
+    });
+    return;
+  }
+  const res = await apiFetch(`/categories/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
+export async function createTransaction(input: {
+  spaceId: string;
+  type: 'income' | 'expense';
+  amountMinor: number;
+  currency: string;
+  categoryId: string | null;
+  description: string | null;
+  occurredAt: string;
+}): Promise<LedgerTransaction> {
+  const cached = await loadCachedLedger();
+  if (cached?.userId === 'guest') {
+    const before = new Set(cached.transactions.map((t) => t.id));
+    const next = await appendGuestTransaction({
+      type: input.type,
+      amountMinor: input.amountMinor,
+      currency: input.currency,
+      categoryId: input.categoryId,
+      description: input.description,
+      occurredAt: input.occurredAt,
+    });
+    const created = next.transactions.find((t) => !before.has(t.id));
+    if (!created) throw new Error('Guest transaction failed');
+    return created;
+  }
+  const { createIdempotencyKey } = await import('@clear-money/domain');
+  const { offlineQueue } = await import('../offline/client');
+  const local = await offlineQueue.enqueueLocal({
+    spaceId: input.spaceId,
+    type: input.type,
+    amountMinor: input.amountMinor,
+    currency: input.currency,
+    categoryId: input.categoryId,
+    description: input.description,
+    occurredAt: input.occurredAt,
+    idempotencyKey: createIdempotencyKey(),
+  });
+  await offlineQueue.reconcile();
+  return {
+    id: local.id,
+    spaceId: local.spaceId,
+    type: local.type,
+    amountMinor: local.amountMinor,
+    currency: local.currency,
+    categoryId: local.categoryId,
+    description: local.description,
+    occurredAt: local.occurredAt,
+    createdAt: local.createdAt,
+    createdBy: 'self',
+    status: local.status === 'pending_sync' ? 'pending_sync' : 'confirmed',
+    source: 'manual',
+  };
 }
 
 export async function restoreTransaction(txn: LedgerTransaction): Promise<void> {

@@ -183,6 +183,8 @@ async function applyImmediateActions(
     categories: DemoCategory[];
     defaultSource?: LedgerTransaction['source'];
     addCategory: (input: { name: string; type: 'income' | 'expense' }) => DemoCategory;
+    renameCategory: (id: string, name: string) => void;
+    deleteCategory: (id: string) => void;
     addTransaction: (input: {
       spaceId: string;
       type: 'income' | 'expense';
@@ -195,8 +197,15 @@ async function applyImmediateActions(
     }) => LedgerTransaction;
     updateTransaction: (
       id: string,
-      patch: { description?: string | null; categoryId?: string | null },
+      patch: {
+        description?: string | null;
+        categoryId?: string | null;
+        amountMinor?: number;
+        occurredAt?: string;
+      },
     ) => void;
+    undoTransaction: (id: string) => void;
+    hideTransaction: (id: string) => void;
     createGoal: (input: {
       name: string;
       targetMinor: number;
@@ -205,6 +214,35 @@ async function applyImmediateActions(
       startDate?: string;
       plannedContributionMinor?: number;
     }) => Promise<unknown>;
+    updateGoal: (
+      id: string,
+      patch: { name?: string; savedMinor?: number; status?: string },
+    ) => Promise<unknown>;
+    deleteGoal: (id: string) => Promise<void>;
+    createRecurring: (input: {
+      name: string;
+      amountMinor: number;
+      kind: 'income' | 'expense';
+      dayOfMonth: number;
+    }) => Promise<unknown>;
+    updateRecurring: (
+      id: string,
+      patch: {
+        name?: string;
+        amountMinor?: number;
+        kind?: 'income' | 'expense';
+        dayOfMonth?: number;
+        active?: boolean;
+      },
+    ) => Promise<void>;
+    deleteRecurring: (id: string) => Promise<void>;
+    createSpace: (input: {
+      name: string;
+      type?: string;
+      currency?: string;
+    }) => Promise<unknown>;
+    setSpace: (spaceId: string) => void;
+    inviteMember: (email: string, role: string) => Promise<void>;
   },
 ) {
   const reports: Array<{ title: string; body: string }> = [];
@@ -242,6 +280,40 @@ async function applyImmediateActions(
         categories = [...categories, created];
         applied += 1;
       }
+    } else if (action.type === 'rename_category') {
+      let id = action.categoryId;
+      if (!id && action.fromName) {
+        const type = action.categoryType;
+        const match = categories.find(
+          (c) =>
+            c.name.toLowerCase() === action.fromName!.toLowerCase() &&
+            (!type || c.type === type),
+        );
+        id = match?.id;
+      }
+      if (id) {
+        helpers.renameCategory(id, action.toName);
+        categories = categories.map((c) =>
+          c.id === id ? { ...c, name: action.toName.trim() } : c,
+        );
+        applied += 1;
+      }
+    } else if (action.type === 'delete_category') {
+      let id = action.categoryId;
+      if (!id && action.name) {
+        const type = action.categoryType;
+        const match = categories.find(
+          (c) =>
+            c.name.toLowerCase() === action.name!.toLowerCase() &&
+            (!type || c.type === type),
+        );
+        id = match?.id;
+      }
+      if (id) {
+        helpers.deleteCategory(id);
+        categories = categories.filter((c) => c.id !== id);
+        applied += 1;
+      }
     } else if (action.type === 'update_transaction') {
       let categoryId: string | null | undefined;
       if (action.category) {
@@ -256,11 +328,25 @@ async function applyImmediateActions(
         }
         categoryId = resolveId(action.category, type);
       }
+      const amountMinor =
+        action.amountMajor != null
+          ? majorToMinorSafe(action.amountMajor, helpers.currency)
+          : undefined;
       helpers.updateTransaction(action.transactionId, {
         description: action.note !== undefined ? action.note : undefined,
         categoryId,
+        amountMinor: amountMinor ?? undefined,
+        occurredAt: action.occurredAt
+          ? new Date(action.occurredAt).toISOString()
+          : undefined,
       });
       updated += 1;
+      applied += 1;
+    } else if (action.type === 'delete_transaction') {
+      helpers.undoTransaction(action.transactionId);
+      applied += 1;
+    } else if (action.type === 'hide_transaction') {
+      helpers.hideTransaction(action.transactionId);
       applied += 1;
     } else if (action.type === 'add_transaction') {
       const amountMinor = majorToMinorSafe(action.amountMajor, helpers.currency);
@@ -322,6 +408,89 @@ async function applyImmediateActions(
       } catch {
         // offline / cap — leave reply to explain
       }
+    } else if (action.type === 'update_goal') {
+      try {
+        const savedMinor =
+          action.savedMajor != null
+            ? majorToMinorSafe(action.savedMajor, helpers.currency)
+            : undefined;
+        await helpers.updateGoal(action.goalId, {
+          name: action.name,
+          savedMinor: savedMinor ?? undefined,
+          status: action.status,
+        });
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'delete_goal') {
+      try {
+        await helpers.deleteGoal(action.goalId);
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'create_recurring') {
+      const amountMinor = majorToMinorSafe(action.amountMajor, helpers.currency);
+      if (amountMinor == null) continue;
+      try {
+        await helpers.createRecurring({
+          name: action.name.trim(),
+          amountMinor,
+          kind: action.kind,
+          dayOfMonth: action.dayOfMonth,
+        });
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'update_recurring') {
+      try {
+        const amountMinor =
+          action.amountMajor != null
+            ? majorToMinorSafe(action.amountMajor, helpers.currency)
+            : undefined;
+        await helpers.updateRecurring(action.recurringId, {
+          name: action.name,
+          amountMinor: amountMinor ?? undefined,
+          kind: action.kind,
+          dayOfMonth: action.dayOfMonth,
+          active: action.active,
+        });
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'delete_recurring') {
+      try {
+        await helpers.deleteRecurring(action.recurringId);
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'create_space') {
+      try {
+        await helpers.createSpace({
+          name: action.name.trim(),
+          type: action.spaceType,
+          currency: action.currency,
+        });
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
+    } else if (action.type === 'switch_space') {
+      if (action.spaceId) {
+        helpers.setSpace(action.spaceId);
+        applied += 1;
+      }
+    } else if (action.type === 'invite_member') {
+      try {
+        await helpers.inviteMember(action.email, action.role);
+        applied += 1;
+      } catch {
+        /* ignore */
+      }
     } else if (action.type === 'report') {
       reports.push({ title: action.title, body: action.body });
     }
@@ -341,8 +510,25 @@ async function applyImmediateActions(
 
 export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t, locale } = useI18n();
-  const { state, addCategory, addTransaction, updateTransaction, createGoal, signedIn } =
-    useLedger();
+  const {
+    state,
+    addCategory,
+    addTransaction,
+    updateTransaction,
+    undoTransaction,
+    hideTransaction,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    createRecurring,
+    updateRecurring,
+    deleteRecurring,
+    createSpace,
+    setSpace,
+    renameCategory,
+    deleteCategory,
+    signedIn,
+  } = useLedger();
   const { showToast } = useToast();
   const { notifyEntry } = usePennyNotify();
   const [input, setInput] = useState('');
@@ -410,6 +596,34 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         netMinor: totals.netMinor,
       },
       recent,
+      goals: (state.goals ?? [])
+        .filter((g) => g.spaceId === space.id && g.status !== 'cancelled')
+        .slice(0, 12)
+        .map((g) => ({
+          id: g.id,
+          name: g.name,
+          targetMinor: g.targetMinor,
+          savedMinor: g.savedMinor ?? 0,
+          durationMonths: g.durationMonths,
+          status: g.status,
+          paceStatus: g.paceStatus ?? null,
+        })),
+      recurring: (state.recurring ?? [])
+        .filter((r) => r.spaceId === space.id)
+        .slice(0, 12)
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          amountMinor: r.amountMinor,
+          kind: r.kind,
+          dayOfMonth: r.dayOfMonth,
+          active: r.active,
+        })),
+      spaces: state.spaces.map((s) => ({
+        id: s.id,
+        name: s.name,
+        currency: s.currency,
+      })),
     };
   }, [space.currency, space.id, space.name, state]);
 
@@ -770,9 +984,29 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         categories: state.categories,
         defaultSource: source === 'voice' ? 'voice' : 'manual',
         addCategory,
+        renameCategory,
+        deleteCategory,
         addTransaction,
         updateTransaction,
+        undoTransaction,
+        hideTransaction,
         createGoal,
+        updateGoal,
+        deleteGoal,
+        createRecurring,
+        updateRecurring,
+        deleteRecurring,
+        createSpace,
+        setSpace,
+        inviteMember: async (email, role) => {
+          const res = await apiFetch(`/spaces/${space.id}/members/invite`, {
+            method: 'POST',
+            body: JSON.stringify({ email, role }),
+          });
+          if (res.offline || !res.data) {
+            throw new Error('Could not send invite');
+          }
+        },
       });
 
       const suggestions = data.suggestions ?? result.categorySuggestions;

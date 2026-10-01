@@ -2,7 +2,7 @@
   "expo": {
     "name": "Clear Money",
     "slug": "clear-money",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "scheme": "clearmoney",
     "userInterfaceStyle": "automatic",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F7F8FA"
+      "backgroundColor": "#5B5CE2"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,9 +25,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F7F8FA"
+        "backgroundColor": "#5B5CE2"
       },
       "package": "app.clearmoney.mobile",
+      "versionCode": 2,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
@@ -41,8 +42,8 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
-          "backgroundColor": "#F7F8FA",
-          "imageWidth": 200
+          "backgroundColor": "#5B5CE2",
+          "imageWidth": 220
         }
       ],
       [

@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { computePeriodTotals } from '@clear-money/domain';
 import { PennyAvatar } from '../src/components/penny/PennyFigure';
+import { applyPennyActions, type PennyAction } from '../src/lib/apply-penny-actions';
 import { apiFetch } from '../src/lib/api';
 import { t } from '../src/lib/i18n';
 import {
@@ -32,9 +33,30 @@ type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string };
 
 const STARTERS = [
   'I spent 12.50 on coffee',
-  'I also spent 50 TND on clothes',
-  'Change the last note to buying clothes',
+  'Create a goal for a laptop — 1200 over 6 months',
+  'Add my salary 3000 on the 1st',
+  'Delete the last expense',
+  'Rename Coffee to Café',
+  'What did I spend this month?',
 ];
+
+function chipsFromActions(
+  actions: PennyAction[],
+  apiSuggestions?: Array<{ label?: string; value?: string }>,
+): Array<{ label: string; value: string }> {
+  const ask = actions.find((a) => a.type === 'ask_category') as
+    | Extract<PennyAction, { type: 'ask_category' }>
+    | undefined;
+  if (ask?.suggestions?.length) {
+    return ask.suggestions.map((s) => ({ label: s.label, value: s.value }));
+  }
+  if (apiSuggestions?.length) {
+    return apiSuggestions
+      .filter((s) => s.value)
+      .map((s) => ({ label: s.label || String(s.value), value: String(s.value) }));
+  }
+  return [];
+}
 
 export default function PennyScreen() {
   const router = useRouter();
@@ -47,6 +69,8 @@ export default function PennyScreen() {
   const [guest, setGuest] = useState(false);
   const [creditsLeft, setCreditsLeft] = useState<number | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [categoryChips, setCategoryChips] = useState<Array<{ label: string; value: string }>>([]);
+  const pendingAskRef = useRef<PennyAction | null>(null);
   const listRef = useRef<FlatList>(null);
 
   const boot = useCallback(async () => {
@@ -105,12 +129,46 @@ export default function PennyScreen() {
     setInput('');
     setBusy(true);
     setError(null);
+    setCategoryChips([]);
     const userMsg: ChatMsg = { id: `u-${Date.now()}`, role: 'user', content: text };
     setMessages((m) => [...m, userMsg]);
 
     try {
       const setup = await loadSetupSession();
-      const ledger = await loadLedger();
+      let ledger = await loadLedger();
+
+      // If Penny asked for a category, complete the pending spend locally first.
+      const pending = pendingAskRef.current;
+      if (pending && pending.type === 'ask_category') {
+        const appliedLocal = await applyPennyActions(
+          [
+            {
+              type: 'add_transaction',
+              entryType: pending.entryType,
+              amountMajor: pending.amountMajor,
+              category: text,
+              note: pending.note,
+              occurredAt: pending.occurredAt,
+            },
+          ],
+          ledger,
+        );
+        pendingAskRef.current = null;
+        if (appliedLocal.applied > 0) {
+          ledger = await loadLedger().catch(() => ledger);
+          setMessages((m) => [
+            ...m,
+            {
+              id: `a-${Date.now()}`,
+              role: 'assistant',
+              content: `Logged ${pending.amountMajor} as ${text}. Anything else?`,
+            },
+          ]);
+          setBusy(false);
+          return;
+        }
+      }
+
       const space = ledger.spaces.find((s) => s.id === ledger.activeSpaceId);
       const txns = transactionsForSpace(ledger);
       const totals = computePeriodTotals(txns, space?.currency ?? 'USD');
@@ -145,6 +203,7 @@ export default function PennyScreen() {
               netMinor: totals.netMinor,
             },
             recent: txns.slice(0, 12).map((row) => ({
+              id: row.id,
               type: row.type,
               amountMinor: row.amountMinor,
               category: categoryName(ledger, row.categoryId),
@@ -152,8 +211,33 @@ export default function PennyScreen() {
               occurredAt: row.occurredAt,
             })),
             goals: ledger.goals
-              .filter((g) => g.spaceId === ledger.activeSpaceId)
-              .slice(0, 8),
+              .filter((g) => g.spaceId === ledger.activeSpaceId && g.status !== 'cancelled')
+              .slice(0, 12)
+              .map((g) => ({
+                id: g.id,
+                name: g.name,
+                targetMinor: g.targetMinor,
+                savedMinor: g.savedMinor,
+                durationMonths: g.durationMonths,
+                status: g.status,
+                paceStatus: g.paceStatus ?? null,
+              })),
+            recurring: ledger.recurring
+              .filter((r) => r.spaceId === ledger.activeSpaceId)
+              .slice(0, 12)
+              .map((r) => ({
+                id: r.id,
+                name: r.name,
+                amountMinor: r.amountMinor,
+                kind: r.kind,
+                dayOfMonth: r.dayOfMonth,
+                active: r.active,
+              })),
+            spaces: ledger.spaces.map((s) => ({
+              id: s.id,
+              name: s.name,
+              currency: s.currency,
+            })),
           },
         }),
       });
@@ -162,13 +246,27 @@ export default function PennyScreen() {
         reply?: string;
         message?: string;
         error?: string;
+        actions?: PennyAction[];
+        suggestions?: Array<{ label?: string; value?: string }>;
         usage?: { remaining?: number };
       };
       if (typeof body.usage?.remaining === 'number') setCreditsLeft(body.usage.remaining);
       if (res.status === 401) throw new Error(t(locale, 'ai.needLogin'));
       if (res.status === 402) throw new Error(t(locale, 'ai.outOfCredits'));
       if (!res.ok) throw new Error(body.error || body.message || t(locale, 'ai.error'));
-      const reply = body.reply || body.message || t(locale, 'ai.error');
+
+      const actions = Array.isArray(body.actions) ? body.actions : [];
+      const applied = await applyPennyActions(actions, ledger);
+      pendingAskRef.current = applied.pendingAsk;
+      setCategoryChips(chipsFromActions(actions, body.suggestions));
+
+      let reply = body.reply || body.message || t(locale, 'ai.error');
+      if (applied.reports.length) {
+        reply = `${reply}\n\n${applied.reports.map((r) => `${r.title}\n${r.body}`).join('\n\n')}`;
+      }
+      if (applied.applied > 0) {
+        ledger = await loadLedger().catch(() => ledger);
+      }
       setMessages((m) => [...m, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t(locale, 'ai.error');
@@ -180,7 +278,7 @@ export default function PennyScreen() {
   }
 
   const pose = busy ? 'think' : error ? 'alert' : 'hello';
-  const showStarters = !guest && messages.length <= 2 && !busy;
+  const showStarters = !guest && messages.length <= 2 && !busy && categoryChips.length === 0;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.canvas }]} edges={['top', 'bottom']}>
@@ -238,7 +336,10 @@ export default function PennyScreen() {
                 ]}
               >
                 {item.role === 'assistant' ? (
-                  <PennyAvatar pose={busy && item.id === messages[messages.length - 1]?.id ? 'think' : 'idle'} size="sm" />
+                  <PennyAvatar
+                    pose={busy && item.id === messages[messages.length - 1]?.id ? 'think' : 'idle'}
+                    size="sm"
+                  />
                 ) : null}
                 <View
                   style={[
@@ -278,20 +379,43 @@ export default function PennyScreen() {
           </View>
         ) : null}
 
+        {categoryChips.length ? (
+          <View style={styles.chips}>
+            {categoryChips.map((chip) => (
+              <Pressable
+                key={chip.value}
+                disabled={busy}
+                onPress={() => void send(chip.value)}
+                style={[styles.chip, { borderColor: colors.brand, backgroundColor: colors.brandTint }]}
+              >
+                <Text style={{ color: colors.brand, fontSize: 12, fontWeight: '700' }}>{chip.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
         {error ? <Text style={[styles.error, { color: colors.expense }]}>{error}</Text> : null}
 
-        <View style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+        <View
+          style={[styles.composer, { borderTopColor: colors.border, backgroundColor: colors.surface }]}
+        >
           <TextInput
             value={input}
             onChangeText={setInput}
             placeholder={t(locale, 'ai.placeholder')}
             placeholderTextColor={colors.inkMuted}
-            style={[styles.input, { borderColor: colors.border, color: colors.ink, backgroundColor: colors.canvas }]}
+            style={[
+              styles.input,
+              { borderColor: colors.border, color: colors.ink, backgroundColor: colors.canvas },
+            ]}
             editable={!busy && !guest}
             onSubmitEditing={() => void send()}
           />
           <Pressable
-            style={[styles.send, { backgroundColor: colors.brand, opacity: busy || !input.trim() || guest ? 0.5 : 1 }]}
+            style={[
+              styles.send,
+              { backgroundColor: colors.brand, opacity: busy || !input.trim() || guest ? 0.5 : 1 },
+            ]}
             disabled={busy || !input.trim() || guest}
             onPress={() => void send()}
             accessibilityLabel={t(locale, 'ai.send')}
@@ -330,15 +454,36 @@ const styles = StyleSheet.create({
     padding: space[4],
     gap: space[3],
   },
-  signIn: { minHeight: 44, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' },
+  signIn: {
+    minHeight: 44,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space[2] },
   list: { padding: space[4], gap: space[3], paddingBottom: space[6] },
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: space[2] },
   rowUser: { justifyContent: 'flex-end' },
   rowAssistant: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '85%', borderRadius: radius.card, paddingHorizontal: 14, paddingVertical: 10 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2], paddingHorizontal: space[4], paddingBottom: space[2] },
-  chip: { borderRadius: radius.pill, borderWidth: 1, paddingHorizontal: space[3], paddingVertical: 8 },
+  bubble: {
+    maxWidth: '85%',
+    borderRadius: radius.card,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space[2],
+    paddingHorizontal: space[4],
+    paddingBottom: space[2],
+  },
+  chip: {
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: space[3],
+    paddingVertical: 8,
+  },
   error: { paddingHorizontal: space[4], marginBottom: space[2] },
   composer: {
     flexDirection: 'row',
