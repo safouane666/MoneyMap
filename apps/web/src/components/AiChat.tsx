@@ -87,6 +87,21 @@ function majorToMinorSafe(amountMajor: number, currency: string): number | null 
   }
 }
 
+/** Short replies while a spend draft is open — treat as category picks, not new AI turns. */
+function looksLikeCategoryOnly(text: string): boolean {
+  const value = text.trim();
+  if (!value || value.length > 48) return false;
+  if (/\d/.test(value)) return false;
+  if (
+    /\b(spent|spend|paid|pay|received|receive|earned|create|delete|rename|goal|invite|note)\b/i.test(
+      value,
+    )
+  ) {
+    return false;
+  }
+  return true;
+}
+
 const STARTER_PROMPTS = [
   'I spent 12.50 on coffee',
   'I also spent 50 TND on clothes',
@@ -184,7 +199,10 @@ async function applyImmediateActions(
     spaceId: string;
     categories: DemoCategory[];
     defaultSource?: LedgerTransaction['source'];
-    addCategory: (input: { name: string; type: 'income' | 'expense' }) => DemoCategory;
+    addCategory: (input: {
+      name: string;
+      type: 'income' | 'expense';
+    }) => Promise<DemoCategory>;
     renameCategory: (id: string, name: string) => void;
     deleteCategory: (id: string) => void;
     addTransaction: (input: {
@@ -294,7 +312,10 @@ async function applyImmediateActions(
     }
     if (action.type === 'create_category') {
       if (!resolveId(action.name, action.categoryType, { mapDefaults: false })) {
-        const created = helpers.addCategory({ name: action.name, type: action.categoryType });
+        const created = await helpers.addCategory({
+          name: action.name,
+          type: action.categoryType,
+        });
         categories = [...categories, created];
         applied += 1;
       }
@@ -337,14 +358,23 @@ async function applyImmediateActions(
       if (action.category) {
         let type: 'income' | 'expense' = 'expense';
         const existing = categories.find(
-          (c) => c.name.toLowerCase() === action.category!.toLowerCase(),
+          (c) =>
+            stripCategoryEmoji(c.name).toLowerCase() ===
+              stripCategoryEmoji(action.category!).toLowerCase() ||
+            c.name.toLowerCase() === action.category!.toLowerCase(),
         );
         if (existing) type = existing.type;
-        if (!resolveId(action.category, type)) {
-          const created = helpers.addCategory({ name: action.category, type });
+        const mapped =
+          matchDefaultCategoryHint(action.category, type) ??
+          stripCategoryEmoji(action.category) ??
+          action.category;
+        let id = resolveId(mapped, type) ?? resolveId(action.category, type);
+        if (!id) {
+          const created = await helpers.addCategory({ name: mapped, type });
           categories = [...categories, created];
+          id = created.id;
         }
-        categoryId = resolveId(action.category, type);
+        categoryId = id;
       }
       const amountMinor =
         action.amountMajor != null
@@ -378,19 +408,26 @@ async function applyImmediateActions(
         };
         continue;
       }
-      if (!resolveId(action.category, action.entryType)) {
-        const created = helpers.addCategory({
-          name: action.category,
+      const mapped =
+        matchDefaultCategoryHint(action.category, action.entryType) ??
+        stripCategoryEmoji(action.category) ??
+        action.category;
+      let categoryId =
+        resolveId(mapped, action.entryType) ?? resolveId(action.category, action.entryType);
+      if (!categoryId) {
+        const created = await helpers.addCategory({
+          name: mapped,
           type: action.entryType,
         });
         categories = [...categories, created];
+        categoryId = created.id;
       }
       const txn = helpers.addTransaction({
         spaceId: helpers.spaceId,
         type: action.entryType,
         amountMinor,
         currency: helpers.currency,
-        categoryId: resolveId(action.category, action.entryType),
+        categoryId,
         description: action.note?.trim() || null,
         occurredAt: action.occurredAt
           ? new Date(action.occurredAt).toISOString()
@@ -768,7 +805,50 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     }
   })();
 
+  const NOTES_PREF_KEY = 'cm.penny.askNotes';
+
+  const shouldAskNotes = () => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(NOTES_PREF_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  };
+
+  const setAskNotesPref = (ask: boolean) => {
+    try {
+      localStorage.setItem(NOTES_PREF_KEY, ask ? 'true' : 'false');
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const isNoteDecline = (text: string) => {
+    const t = text.trim().toLowerCase();
+    if (!t) return false;
+    if (/^(__skip_note__|skip|no|nope|nah|non|لا)$/i.test(t)) return true;
+    return (
+      /\b(don'?t|do not|never|stop|no more)\b.{0,40}\bnote/i.test(t) ||
+      /\b(no note|without a note|skip( the)? note)\b/i.test(t) ||
+      /\bif i (do )?not ask\b.{0,40}\bnote/i.test(t)
+    );
+  };
+
   const promptForNote = (txnId: string, preface?: string) => {
+    // Notes are opt-in — never interrupt after a save unless the user enabled it.
+    if (!shouldAskNotes()) {
+      setAwaitingNoteId(null);
+      setChips([]);
+      if (preface) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a_saved_${Date.now()}`, role: 'assistant', content: preface },
+        ]);
+        scrollToEnd();
+      }
+      return;
+    }
     setAwaitingNoteId(txnId);
     setChips([skipChip]);
     setMessages((prev) => [
@@ -783,7 +863,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     scrollToEnd();
   };
 
-  const savePendingWithCategory = (categoryName: string) => {
+  const savePendingWithCategory = async (categoryName: string) => {
     if (!pending) return;
 
     let resolvedName = categoryName.trim();
@@ -797,21 +877,41 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     if (createMatch?.[1]) {
       resolvedName = createMatch[1].trim().replace(/^(a|an|the)\s+/i, '');
     }
-    resolvedName = resolvedName
+    const mapped =
+      matchDefaultCategoryHint(resolvedName, pending.entryType) ??
+      stripCategoryEmoji(resolvedName) ??
+      resolvedName;
+    resolvedName = mapped
       .split(/\s+/)
       .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .map((w) => (w === '&' ? w : w.charAt(0).toUpperCase() + w.slice(1)))
       .join(' ');
+    // Keep known default casing
+    const known = matchDefaultCategoryHint(resolvedName, pending.entryType);
+    if (known) resolvedName = known;
     if (!resolvedName) return;
 
     const amountMinor = majorToMinorSafe(pending.amountMajor, space.currency);
     if (amountMinor == null) return;
 
-    let category = state.categories.find(
-      (c) => c.type === pending.entryType && c.name.toLowerCase() === resolvedName.toLowerCase(),
-    );
+    let category =
+      state.categories.find((c) => {
+        if (c.type !== pending.entryType) return false;
+        if (c.spaceId != null && c.spaceId !== space.id) return false;
+        const cleaned = stripCategoryEmoji(c.name).toLowerCase();
+        return (
+          cleaned === resolvedName.toLowerCase() ||
+          c.name.toLowerCase() === resolvedName.toLowerCase() ||
+          cleaned === categoryName.trim().toLowerCase()
+        );
+      }) ?? null;
     if (!category) {
-      category = addCategory({ name: resolvedName, type: pending.entryType });
+      try {
+        category = await addCategory({ name: resolvedName, type: pending.entryType });
+      } catch {
+        showToast({ message: t('ai.error') });
+        return;
+      }
     }
 
     const created = addTransaction({
@@ -831,17 +931,30 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       return;
     }
 
+    const savedPending = pending;
     setPending(null);
     spendDraftRef.current = null;
-    setMessages((prev) => [...prev, { id: `u_${Date.now()}`, role: 'user', content: categoryName }]);
+    setMessages((prev) => [
+      ...prev,
+      { id: `u_${Date.now()}`, role: 'user', content: categoryName },
+      {
+        id: `a_${Date.now() + 1}`,
+        role: 'assistant',
+        content: t('ai.savedQuip'),
+      },
+    ]);
     notifyEntry({
-      type: pending.entryType,
+      type: savedPending.entryType,
       amountMinor,
       currency: space.currency,
       spaceId: space.id,
       fallbackMessage: t('ai.applied'),
     });
-    promptForNote(created.id, t('ai.savedQuip'));
+    // Do not auto-ask for a note — only if user opted in.
+    if (shouldAskNotes()) {
+      promptForNote(created.id);
+    }
+    scrollToEnd();
   };
 
   const finishNote = (note: string | null) => {
@@ -870,19 +983,49 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
 
     // Voice always starts a fresh assistant turn (don't treat spoken sentences as category picks)
     if (awaitingNoteId && !opts?.force) {
+      setMessages((prev) => [...prev, { id: `u_${Date.now()}`, role: 'user', content }]);
+      if (isNoteDecline(content)) {
+        setAskNotesPref(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `a_${Date.now() + 1}`,
+            role: 'assistant',
+            content: t('ai.noteSkipped'),
+          },
+        ]);
+        finishNote(null);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a_${Date.now() + 1}`, role: 'assistant', content: t('ai.noteThanks') },
+        ]);
+        finishNote(content);
+      }
+      setInput('');
+      scrollToEnd();
+      return;
+    }
+
+    // Preference update even when not awaiting a note
+    if (isNoteDecline(content) && /\bnote/i.test(content) && !pending) {
+      setAskNotesPref(false);
       setMessages((prev) => [
         ...prev,
         { id: `u_${Date.now()}`, role: 'user', content },
-        { id: `a_${Date.now() + 1}`, role: 'assistant', content: t('ai.noteThanks') },
+        {
+          id: `a_${Date.now() + 1}`,
+          role: 'assistant',
+          content: "Got it — I won't ask for notes unless you want one.",
+        },
       ]);
-      finishNote(content);
       setInput('');
       scrollToEnd();
       return;
     }
 
     if (pending && !opts?.force) {
-      savePendingWithCategory(content);
+      void savePendingWithCategory(content);
       setInput('');
       return;
     }
@@ -891,40 +1034,63 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     if (spendDraftRef.current && !opts?.force) {
       const draft = spendDraftRef.current;
       const createdCat = parseCreateCategory(content);
-      const categoryName = createdCat?.name;
+      const rawName = createdCat?.name ?? (looksLikeCategoryOnly(content) ? content.trim() : null);
+      const categoryName =
+        (rawName && matchDefaultCategoryHint(rawName, draft.entryType)) ||
+        (rawName ? stripCategoryEmoji(rawName) : null);
       if (categoryName) {
         const amountMinor = majorToMinorSafe(draft.amount, space.currency);
         if (amountMinor != null) {
-          let category = state.categories.find(
-            (c) =>
-              c.type === draft.entryType && c.name.toLowerCase() === categoryName.toLowerCase(),
-          );
+          let category =
+            state.categories.find((c) => {
+              if (c.type !== draft.entryType) return false;
+              const cleaned = stripCategoryEmoji(c.name).toLowerCase();
+              return (
+                cleaned === categoryName.toLowerCase() ||
+                c.name.toLowerCase() === categoryName.toLowerCase()
+              );
+            }) ?? null;
           if (!category) {
-            category = addCategory({ name: categoryName, type: draft.entryType });
+            try {
+              category = await addCategory({ name: categoryName, type: draft.entryType });
+            } catch {
+              /* fall through to AI */
+            }
           }
-          const created = addTransaction({
-            spaceId: space.id,
-            type: draft.entryType,
-            amountMinor,
-            currency: space.currency,
-            categoryId: category.id,
-            description: draft.note?.trim() || null,
-            occurredAt: new Date().toISOString(),
-          });
-          spendDraftRef.current = null;
-          setPending(null);
-          setMessages((prev) => [...prev, { id: `u_${Date.now()}`, role: 'user', content }]);
-          if (created?.id) {
-            notifyEntry({
+          if (category) {
+            const created = addTransaction({
+              spaceId: space.id,
               type: draft.entryType,
               amountMinor,
               currency: space.currency,
-              spaceId: space.id,
-              fallbackMessage: t('ai.applied'),
+              categoryId: category.id,
+              description: draft.note?.trim() || null,
+              occurredAt: new Date().toISOString(),
             });
-            promptForNote(created.id, t('ai.savedQuip'));
-            setInput('');
-            return;
+            spendDraftRef.current = null;
+            setPending(null);
+            setMessages((prev) => [
+              ...prev,
+              { id: `u_${Date.now()}`, role: 'user', content },
+              {
+                id: `a_${Date.now() + 1}`,
+                role: 'assistant',
+                content: t('ai.savedQuip'),
+              },
+            ]);
+            if (created?.id) {
+              notifyEntry({
+                type: draft.entryType,
+                amountMinor,
+                currency: space.currency,
+                spaceId: space.id,
+                fallbackMessage: t('ai.applied'),
+              });
+              if (shouldAskNotes()) promptForNote(created.id);
+              setInput('');
+              scrollToEnd();
+              return;
+            }
           }
         }
       }
@@ -1094,6 +1260,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         }
         if (
           result.lastCreatedId &&
+          shouldAskNotes() &&
           !actions.some((a) => a.type === 'add_transaction' && a.note)
         ) {
           promptForNote(result.lastCreatedId);
@@ -1143,6 +1310,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   const onChip = (suggestion: AiSuggestion) => {
     if (busy || voice.phase !== 'idle') return;
     if (suggestion.value === '__skip_note__') {
+      setAskNotesPref(false);
       setMessages((prev) => [
         ...prev,
         { id: `u_${Date.now()}`, role: 'user', content: t('ai.skipNote') },
@@ -1153,7 +1321,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       return;
     }
     if (pending) {
-      savePendingWithCategory(suggestion.value);
+      void savePendingWithCategory(suggestion.value);
       return;
     }
     void sendToAi(suggestion.value);

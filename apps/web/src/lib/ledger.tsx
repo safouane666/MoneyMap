@@ -115,7 +115,10 @@ interface LedgerContextValue {
   restoreTransaction: (transaction: LedgerTransaction) => void;
   hideTransaction: (id: string) => void;
   unhideTransaction: (id: string) => void;
-  addCategory: (input: { name: string; type: 'income' | 'expense' }) => DemoCategory;
+  addCategory: (input: {
+    name: string;
+    type: 'income' | 'expense';
+  }) => Promise<DemoCategory>;
   renameCategory: (id: string, name: string) => void;
   deleteCategory: (id: string) => void;
 }
@@ -918,7 +921,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   );
 
   const addCategory = useCallback(
-    (input: { name: string; type: 'income' | 'expense' }) => {
+    async (input: { name: string; type: 'income' | 'expense' }) => {
       if (offlineRef.current) {
         const result = addDemoCategory(stateRef.current, {
           ...input,
@@ -927,49 +930,39 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         commit(result.state);
         return result.category;
       }
-      const optimistic: DemoCategory = {
-        id: createId('cat'),
-        name: input.name.trim(),
-        type: input.type,
-        spaceId: stateRef.current.activeSpaceId,
+      const result = await apiFetch<ApiCategory>('/categories', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: input.name,
+          type: input.type,
+          spaceId: stateRef.current.activeSpaceId,
+        }),
+      });
+      if (result.offline || !result.data) {
+        const fallback = addDemoCategory(stateRef.current, {
+          ...input,
+          spaceId: stateRef.current.activeSpaceId,
+        });
+        commit(fallback.state);
+        noteUnsignedWrite();
+        return fallback.category;
+      }
+      const saved: DemoCategory = {
+        id: result.data.id,
+        name: result.data.name,
+        type: result.data.type as 'income' | 'expense',
+        spaceId: result.data.spaceId ?? stateRef.current.activeSpaceId,
+        stableKey: result.data.stableKey ?? null,
       };
       commit({
         ...stateRef.current,
-        categories: [...stateRef.current.categories, optimistic],
+        categories: stateRef.current.categories.some((c) => c.id === saved.id)
+          ? stateRef.current.categories.map((c) => (c.id === saved.id ? saved : c))
+          : [...stateRef.current.categories, saved],
       });
-      void (async () => {
-        try {
-          const result = await apiFetch<ApiCategory>('/categories', {
-            method: 'POST',
-            body: JSON.stringify({
-              name: input.name,
-              type: input.type,
-              spaceId: stateRef.current.activeSpaceId,
-            }),
-          });
-          if (result.offline || !result.data) return;
-          const saved: DemoCategory = {
-            id: result.data.id,
-            name: result.data.name,
-            type: result.data.type as 'income' | 'expense',
-            spaceId: result.data.spaceId ?? stateRef.current.activeSpaceId,
-            stableKey: result.data.stableKey ?? null,
-          };
-          const current = stateRef.current;
-          commit({
-            ...current,
-            categories: current.categories.map((c) => (c.id === optimistic.id ? saved : c)),
-            transactions: current.transactions.map((t) =>
-              t.categoryId === optimistic.id ? { ...t, categoryId: saved.id } : t,
-            ),
-          });
-        } catch {
-          // keep optimistic category
-        }
-      })();
-      return optimistic;
+      return saved;
     },
-    [commit],
+    [commit, noteUnsignedWrite],
   );
 
   const renameCategory = useCallback(

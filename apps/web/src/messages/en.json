@@ -279,6 +279,9 @@
       "child": "Child"
     },
     "roleChangeFailed": "Could not update role",
+    "removeMember": "Remove",
+    "removeConfirm": "Remove {name} from this space?",
+    "removeFailed": "Could not remove member",
     "noMembers": "No members yet.",
     "acceptTitle": "You’re invited",
     "acceptBody": "Join {space} as {role}. Use {email} to accept.",

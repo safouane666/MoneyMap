@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Pressable,
   Share,
   StyleSheet,
@@ -10,7 +11,7 @@ import {
 import { can, type SpaceRole } from '@clear-money/domain';
 import { t } from '../lib/i18n';
 import { apiFetch } from '../lib/api';
-import { getWebOrigin, inviteSpaceMember } from '../lib/ledger';
+import { getWebOrigin, inviteSpaceMember, removeSpaceMember } from '../lib/ledger';
 import { useThemeColors } from '../theme/ThemeContext';
 import { radius, space } from '../theme/tokens';
 
@@ -43,11 +44,13 @@ export function SpaceMembersPanel({
 }) {
   const colors = useThemeColors();
   const canInvite = can(role, 'invite');
+  const canManage = can(role, 'manage_members');
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<(typeof INVITE_ROLES)[number]>('contributor');
   const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
 
@@ -68,6 +71,35 @@ export function SpaceMembersPanel({
     void load();
   }, [load]);
 
+  const confirmRemove = (member: Member) => {
+    const label = member.name || member.email;
+    Alert.alert(
+      t(locale, 'spaces.removeMember'),
+      t(locale, 'spaces.removeConfirm').replace('{name}', label),
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: t(locale, 'spaces.removeMember'),
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setRemovingId(member.id);
+              setError(null);
+              try {
+                await removeSpaceMember(spaceId, member.id);
+                setMembers((prev) => prev.filter((m) => m.id !== member.id));
+              } catch (err) {
+                setError(err instanceof Error ? err.message : t(locale, 'spaces.removeFailed'));
+              } finally {
+                setRemovingId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <Text style={[styles.title, { color: colors.ink }]}>{t(locale, 'spaces.members')}</Text>
@@ -83,6 +115,20 @@ export function SpaceMembersPanel({
             <Text style={{ color: colors.inkSecondary, fontSize: 12, textTransform: 'capitalize' }}>
               {m.role}
             </Text>
+            {canManage ? (
+              <Pressable
+                disabled={removingId === m.id}
+                onPress={() => confirmRemove(m)}
+                style={[
+                  styles.removeBtn,
+                  { borderColor: colors.expense, opacity: removingId === m.id ? 0.5 : 1 },
+                ]}
+              >
+                <Text style={{ color: colors.expense, fontSize: 12, fontWeight: '700' }}>
+                  {t(locale, 'spaces.removeMember')}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         ))
       )}
@@ -178,7 +224,13 @@ const styles = StyleSheet.create({
     gap: space[3],
   },
   title: { fontSize: 14, fontWeight: '600' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space[3] },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space[2] },
+  removeBtn: {
+    borderWidth: 1,
+    borderRadius: radius.control,
+    paddingHorizontal: space[2],
+    paddingVertical: 6,
+  },
   input: {
     minHeight: 44,
     borderWidth: 1,

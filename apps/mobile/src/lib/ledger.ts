@@ -752,6 +752,13 @@ export async function inviteSpaceMember(
   return (await res.json()) as { id: string; acceptPath: string };
 }
 
+export async function removeSpaceMember(spaceId: string, memberId: string): Promise<void> {
+  const res = await apiFetch(`/spaces/${spaceId}/members/${memberId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(await readError(res));
+}
+
 export function goalsForSpace(ledger: MobileLedger, spaceId?: string): Goal[] {
   const id = spaceId || ledger.activeSpaceId;
   return ledger.goals.filter((g) => g.spaceId === id && g.status !== 'cancelled');

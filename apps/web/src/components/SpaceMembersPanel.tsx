@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Trash2 } from 'lucide-react';
 import { ApiError, apiFetch } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,7 @@ export function SpaceMembersPanel({
   const [inviteRole, setInviteRole] = useState<(typeof INVITE_ROLES)[number]>('contributor');
   const [loading, setLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -129,6 +130,30 @@ export function SpaceMembersPanel({
     }
   };
 
+  const onRemoveMember = async (member: Member) => {
+    if (removingId) return;
+    const label = member.name || member.email;
+    if (!window.confirm(t('spaces.removeConfirm').replace('{name}', label))) return;
+    setRemovingId(member.id);
+    setError(null);
+    try {
+      const result = await apiFetch<{ ok: boolean }>(
+        `/spaces/${spaceId}/members/${member.id}`,
+        { method: 'DELETE' },
+      );
+      if (result.offline || !result.data) {
+        setError(t('spaces.needOnline'));
+        return;
+      }
+      setMembers((prev) => prev.filter((m) => m.id !== member.id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('spaces.removeFailed'));
+      await load();
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
   const copyLink = async () => {
     if (!inviteLink) return;
     try {
@@ -161,24 +186,37 @@ export function SpaceMembersPanel({
               <p className="truncate text-sm text-ink-secondary">{member.email}</p>
             </div>
             {canManage ? (
-              <Select
-                value={MEMBER_ROLES.includes(member.role as (typeof MEMBER_ROLES)[number])
-                  ? member.role
-                  : 'contributor'}
-                onValueChange={(v) => void onRoleChange(member.id, v)}
-                disabled={roleUpdating === member.id}
-              >
-                <SelectTrigger className="w-[9.5rem] shrink-0" aria-label={t('spaces.role')}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MEMBER_ROLES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {roleLabel(value)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex shrink-0 items-center gap-2">
+                <Select
+                  value={MEMBER_ROLES.includes(member.role as (typeof MEMBER_ROLES)[number])
+                    ? member.role
+                    : 'contributor'}
+                  onValueChange={(v) => void onRoleChange(member.id, v)}
+                  disabled={roleUpdating === member.id || removingId === member.id}
+                >
+                  <SelectTrigger className="w-[9.5rem]" aria-label={t('spaces.role')}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEMBER_ROLES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {roleLabel(value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="shrink-0 text-expense hover:bg-expense/10"
+                  aria-label={t('spaces.removeMember')}
+                  disabled={removingId === member.id}
+                  onClick={() => void onRemoveMember(member)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             ) : (
               <Badge variant="secondary">{roleLabel(member.role)}</Badge>
             )}

@@ -279,6 +279,9 @@
       "child": "Enfant"
     },
     "roleChangeFailed": "Impossible de modifier le rôle",
+    "removeMember": "Retirer",
+    "removeConfirm": "Retirer {name} de cet espace ?",
+    "removeFailed": "Impossible de retirer le membre",
     "noMembers": "Aucun membre pour l’instant.",
     "acceptTitle": "Vous êtes invité",
     "acceptBody": "Rejoindre {space} en tant que {role}. Utilisez {email} pour accepter.",

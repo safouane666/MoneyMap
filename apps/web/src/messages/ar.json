@@ -279,6 +279,9 @@
       "child": "طفل"
     },
     "roleChangeFailed": "تعذر تحديث الدور",
+    "removeMember": "إزالة",
+    "removeConfirm": "إزالة {name} من هذه المساحة؟",
+    "removeFailed": "تعذر إزالة العضو",
     "noMembers": "لا أعضاء بعد.",
     "acceptTitle": "أنت مدعو",
     "acceptBody": "انضم إلى {space} كـ {role}. استخدم {email} للقبول.",

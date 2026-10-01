@@ -90,10 +90,12 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   const handleCreateCategory = () => {
     const name = newCategoryName.trim();
     if (!name) return;
-    const created = addCategory({ name, type });
-    setCategoryId(created.id);
-    setNewCategoryName('');
-    setAddingCategory(false);
+    void (async () => {
+      const created = await addCategory({ name, type });
+      setCategoryId(created.id);
+      setNewCategoryName('');
+      setAddingCategory(false);
+    })();
   };
 
   return (

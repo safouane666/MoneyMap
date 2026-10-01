@@ -1395,7 +1395,43 @@ export function createApp() {
     const userId = c.get('userId');
     const spaceId = c.req.param('spaceId');
     const memberId = c.req.param('memberId');
-    await requirePermission(userId, spaceId, 'manage_members');
+    await requireMembership(userId, spaceId);
+    const target = (
+      await db()
+        .select()
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.id, memberId),
+            eq(memberships.spaceId, spaceId),
+            isNull(memberships.deletedAt),
+          ),
+        )
+        .limit(1)
+    )[0];
+    if (!target) return c.json({ error: 'Member not found' }, 404);
+
+    const removingSelf = target.userId === userId;
+    if (!removingSelf) {
+      await requirePermission(userId, spaceId, 'manage_members');
+    }
+
+    if (target.role === 'owner') {
+      const owners = await db()
+        .select({ id: memberships.id })
+        .from(memberships)
+        .where(
+          and(
+            eq(memberships.spaceId, spaceId),
+            eq(memberships.role, 'owner'),
+            isNull(memberships.deletedAt),
+          ),
+        );
+      if (owners.length <= 1) {
+        return c.json({ error: 'Cannot remove the last owner from this space' }, 400);
+      }
+    }
+
     await db()
       .update(memberships)
       .set({ deletedAt: new Date() })

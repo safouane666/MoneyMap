@@ -161,12 +161,22 @@ export default function PennyScreen() {
             {
               id: `a-${Date.now()}`,
               role: 'assistant',
-              content: `Logged ${pending.amountMajor} as ${text}. Anything else?`,
+              content: `Saved — ${pending.entryType} ${pending.amountMajor} · ${text}.`,
             },
           ]);
           setBusy(false);
           return;
         }
+        setMessages((m) => [
+          ...m,
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content: t(locale, 'ai.error'),
+          },
+        ]);
+        setBusy(false);
+        return;
       }
 
       const space = ledger.spaces.find((s) => s.id === ledger.activeSpaceId);
@@ -192,11 +202,13 @@ export default function PennyScreen() {
             currency: space?.currency ?? 'USD',
             spaceName: space?.name ?? 'Personal',
             spaceId: ledger.activeSpaceId,
-            categories: ledger.categories.map((c) => ({
-              id: c.id,
-              name: c.name,
-              type: c.type,
-            })),
+            categories: ledger.categories
+              .filter((c) => c.spaceId == null || c.spaceId === ledger.activeSpaceId)
+              .map((c) => ({
+                id: c.id,
+                name: c.name,
+                type: c.type,
+              })),
             totals: {
               incomeMinor: totals.incomeMinor,
               expenseMinor: totals.expenseMinor,

@@ -252,6 +252,9 @@
   "spaces.copied": "Copied",
   "spaces.pendingInvites": "Pending invites",
   "spaces.noMembers": "No members yet.",
+  "spaces.removeMember": "Remove",
+  "spaces.removeConfirm": "Remove {name} from this space?",
+  "spaces.removeFailed": "Could not remove member",
   "spaces.notFound": "Space not found.",
 
   "settings.title": "Settings",
