@@ -261,6 +261,30 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
+        <View style={styles.summaryStack}>
+          <SummaryCard
+            label={t(locale, 'home.net')}
+            amountMinor={totals.netMinor}
+            currency={currency}
+            locale={locale}
+            tone="net"
+          />
+          <SummaryCard
+            label={t(locale, 'home.income')}
+            amountMinor={totals.incomeMinor}
+            currency={currency}
+            locale={locale}
+            tone="income"
+          />
+          <SummaryCard
+            label={t(locale, 'home.expense')}
+            amountMinor={totals.expenseMinor}
+            currency={currency}
+            locale={locale}
+            tone="expense"
+          />
+        </View>
+
         <RecurringHomeSection
           items={recurring}
           currency={currency}
@@ -288,29 +312,6 @@ export default function HomeScreen() {
               ? t(locale, 'goals.safeToSpendMissing')
               : t(locale, 'home.safeToSpendHint')}
           </Text>
-          <View style={styles.summaryStack}>
-            <SummaryCard
-              label={t(locale, 'home.net')}
-              amountMinor={totals.netMinor}
-              currency={currency}
-              locale={locale}
-              tone="net"
-            />
-            <SummaryCard
-              label={t(locale, 'home.income')}
-              amountMinor={totals.incomeMinor}
-              currency={currency}
-              locale={locale}
-              tone="income"
-            />
-            <SummaryCard
-              label={t(locale, 'home.expense')}
-              amountMinor={totals.expenseMinor}
-              currency={currency}
-              locale={locale}
-              tone="expense"
-            />
-          </View>
         </View>
 
         {period === 'thisMonth' ? (

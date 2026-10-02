@@ -142,19 +142,7 @@ export default function HomePage() {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
-      <RecurringHomeSection spaceId={space.id} currency={space.currency} />
-
       <div className="space-y-4">
-        <SummaryCard
-          label={t('app.safeToSpend')}
-          amountMinor={safe.estimateMinor ?? 0}
-          currency={totals.currency}
-          locale={locale}
-          tone="net"
-          large
-          className="stagger-1"
-        />
-        <p className="-mt-2 text-xs text-ink-muted">{t('app.safeToSpendHint')}</p>
         <div className="grid gap-4 sm:grid-cols-3">
           <SummaryCard
             label={t('app.net')}
@@ -162,7 +150,7 @@ export default function HomePage() {
             currency={totals.currency}
             locale={locale}
             tone="net"
-            className="stagger-2"
+            className="stagger-1"
           />
           <SummaryCard
             label={t('app.income')}
@@ -170,7 +158,7 @@ export default function HomePage() {
             currency={totals.currency}
             locale={locale}
             tone="income"
-            className="stagger-3"
+            className="stagger-2"
           />
           <SummaryCard
             label={t('app.expense')}
@@ -178,9 +166,22 @@ export default function HomePage() {
             currency={totals.currency}
             locale={locale}
             tone="expense"
-            className="stagger-3"
+            className="stagger-2"
           />
         </div>
+
+        <RecurringHomeSection spaceId={space.id} currency={space.currency} />
+
+        <SummaryCard
+          label={t('app.safeToSpend')}
+          amountMinor={safe.estimateMinor ?? 0}
+          currency={totals.currency}
+          locale={locale}
+          tone="net"
+          large
+          className="stagger-3"
+        />
+        <p className="-mt-2 text-xs text-ink-muted">{t('app.safeToSpendHint')}</p>
       </div>
 
       {period === 'thisMonth' ? (

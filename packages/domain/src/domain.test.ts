@@ -11,6 +11,7 @@ import {
   busiestSpendingHour,
   highestSpendingWeekday,
   lateEntryInsight,
+  categoryChipParts,
   computeSafeToSpend,
   monthlyTargetMinor,
   expectedSavedByDate,
@@ -181,6 +182,16 @@ describe('time insights', () => {
   });
 });
 
+describe('category chips', () => {
+  it('splits category chips into emoji + label', () => {
+    expect(categoryChipParts('Food', 'food_drinks')).toEqual({
+      emoji: '🍔',
+      label: 'Food & Drinks',
+    });
+    expect(categoryChipParts('Custom Trip').label).toBe('Custom Trip');
+  });
+});
+
 describe('goals / safe-to-spend', () => {
   it('computes baseline estimate', () => {
     const result = computeSafeToSpend({
@@ -195,6 +206,20 @@ describe('goals / safe-to-spend', () => {
     expect(result.status).toBe('ok');
     expect(result.estimateMinor).toBe(40000);
     expect(result.breakdown.length).toBe(5);
+  });
+
+  it('floors safe-to-spend at zero when overspent', () => {
+    const result = computeSafeToSpend({
+      incomeMinor: 10000,
+      expenseMinor: 50000,
+      plannedContributionMinor: 20000,
+      scheduledExpenseMinor: 0,
+      bufferMinor: 0,
+      currency: 'USD',
+      hasRequiredInputs: true,
+    });
+    expect(result.status).toBe('ok');
+    expect(result.estimateMinor).toBe(0);
   });
 
   it('returns honest empty when inputs missing', () => {

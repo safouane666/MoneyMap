@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  categoryChipParts,
   createIdempotencyKey,
-  formatCategoryChip,
+  formatMinorUnits,
   parseAmountInput,
   type CurrencyCode,
 } from '@clear-money/domain';
@@ -16,6 +17,7 @@ import {
   type MobileCategory,
   type MobileLedger,
 } from '../src/lib/ledger';
+import { notifyPennyEntry } from '../src/lib/penny-notify';
 import { getPersonalSpaceId } from '../src/lib/session';
 import { loadSetupSession } from '../src/lib/setup-session';
 import { offlineQueue } from '../src/offline/client';
@@ -33,7 +35,7 @@ function toLocalInputValue(date = new Date()) {
 export default function AddTransactionModal() {
   const router = useRouter();
   const colors = useThemeColors();
-  const { showToast } = useToast();
+  const { showPennyTip, showToast } = useToast();
   const [locale, setLocale] = useState('en');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'expense' | 'income'>('expense');
@@ -178,23 +180,43 @@ export default function AddTransactionModal() {
           </Pressable>
         </View>
         <View style={styles.chips}>
-          {categories.map((c) => (
-            <Pressable
-              key={c.id}
-              onPress={() => setCategoryId(c.id)}
-              style={[
-                styles.chip,
-                {
-                  borderColor: categoryId === c.id ? colors.brand : colors.border,
-                  backgroundColor: categoryId === c.id ? colors.brandTint : colors.surface,
-                },
-              ]}
-            >
-              <Text style={{ color: categoryId === c.id ? colors.brand : colors.ink }}>
-                {formatCategoryChip(c.name, c.stableKey)}
-              </Text>
-            </Pressable>
-          ))}
+          {categories.length === 0 ? (
+            <Text style={{ color: colors.inkMuted, fontSize: 13, marginHorizontal: 4 }}>
+              {t(locale, 'txn.noCategories')}
+            </Text>
+          ) : (
+            categories.map((c) => {
+              const parts = categoryChipParts(c.name, c.stableKey);
+              const on = categoryId === c.id;
+              return (
+                <View key={c.id} style={styles.chipCell}>
+                  <Pressable
+                    onPress={() => setCategoryId(c.id)}
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: on ? colors.brand : colors.border,
+                        backgroundColor: on ? colors.brandTint : colors.surface,
+                      },
+                    ]}
+                  >
+                    {parts.emoji ? (
+                      <Text style={styles.chipEmoji} allowFontScaling={false}>
+                        {parts.emoji}
+                      </Text>
+                    ) : null}
+                    <Text
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                      style={[styles.chipLabel, { color: on ? colors.brand : colors.ink }]}
+                    >
+                      {parts.label}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
         </View>
         {addingCat ? (
           <View style={styles.addCat}>
@@ -290,7 +312,18 @@ export default function AddTransactionModal() {
                   });
                   await offlineQueue.reconcile();
                 }
-                showToast({ message: t(locale, 'app.saved') });
+                await notifyPennyEntry({
+                  type,
+                  amountMinor,
+                  currency: spaceCurrency,
+                  spaceId,
+                  goals: ledger?.goals ?? [],
+                  locale,
+                  formatAmount: (minor, cur) => formatMinorUnits(minor, cur, locale),
+                  showPennyTip,
+                  showToast,
+                  fallbackMessage: t(locale, 'app.saved'),
+                });
                 router.back();
               } catch (err) {
                 setError(err instanceof Error ? err.message : t(locale, 'errors.generic'));
@@ -338,12 +371,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   catHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  // 2-column grid like web `grid-cols-2`.
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+  },
+  chipCell: {
+    width: '50%',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
   chip: {
-    paddingVertical: space[2],
-    paddingHorizontal: space[3],
+    minHeight: 44,
     borderRadius: radius.control,
     borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: space[3],
+  },
+  chipEmoji: { fontSize: 16, lineHeight: 20 },
+  chipLabel: {
+    flex: 1,
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   addCat: { flexDirection: 'row', gap: space[2] },
   input: {

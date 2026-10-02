@@ -182,12 +182,14 @@ export function computeSafeToSpend(input: SafeToSpendInput): SafeToSpendResult {
     };
   }
 
-  const estimate =
+  const raw =
     input.incomeMinor -
     input.expenseMinor -
     input.plannedContributionMinor -
     input.scheduledExpenseMinor -
     input.bufferMinor;
+  // Never surface a negative "safe to spend" — floor at zero.
+  const estimate = Math.max(0, raw);
 
   return {
     status: 'ok',

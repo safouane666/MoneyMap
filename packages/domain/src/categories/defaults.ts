@@ -218,6 +218,30 @@ export function formatCategoryChip(name: string, stableKey?: string | null): str
   return name;
 }
 
+/** Split chip label into emoji + text for grid layouts (emoji left, label truncates). */
+export function categoryChipParts(
+  name: string,
+  stableKey?: string | null,
+): { emoji: string; label: string } {
+  const key = stableKey?.toLowerCase();
+  const fromDefaults =
+    DEFAULT_EXPENSE_CATEGORIES.find((c) => c.stableKey === key) ||
+    DEFAULT_INCOME_CATEGORIES.find((c) => c.stableKey === key);
+  if (fromDefaults) return { emoji: fromDefaults.emoji, label: fromDefaults.name };
+
+  const stripped = stripCategoryEmoji(name);
+  const byName =
+    DEFAULT_EXPENSE_CATEGORIES.find((c) => c.name.toLowerCase() === stripped.toLowerCase()) ||
+    DEFAULT_INCOME_CATEGORIES.find((c) => c.name.toLowerCase() === stripped.toLowerCase());
+  if (byName) return { emoji: byName.emoji, label: byName.name };
+
+  const match = name.match(/^([\p{Extended_Pictographic}\uFE0F\u200D]+)\s*(.*)$/u);
+  if (match?.[1]) {
+    return { emoji: match[1], label: (match[2] || stripped || name).trim() };
+  }
+  return { emoji: '', label: stripped || name };
+}
+
 /** Map a free-text hint (e.g. "coffee") to a default category short name, if confident. */
 export function matchDefaultCategoryHint(
   hint: string,
