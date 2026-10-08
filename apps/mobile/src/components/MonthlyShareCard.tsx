@@ -31,7 +31,7 @@ export function MonthlyShareCard({
     const goalLine = goal
       ? `Goal: ${goal.name} · ${formatMinorUnits(goal.savedMinor, goal.currency, locale)} / ${formatMinorUnits(goal.targetMinor, goal.currency, locale)}`
       : null;
-    return ['Clear Money', periodLabel, `Spent: ${spent}`, `Safe to spend: ${safe}`, goalLine]
+    return ['Penny', periodLabel, `Spent: ${spent}`, `Safe to spend: ${safe}`, goalLine]
       .filter(Boolean)
       .join('\n');
   }, [currency, goal, locale, periodLabel, safeToSpendMinor, spentMinor]);
@@ -46,7 +46,7 @@ export function MonthlyShareCard({
     >
       <View style={styles.top}>
         <View>
-          <Text style={[styles.brand, { color: colors.brand }]}>Clear Money</Text>
+          <Text style={[styles.brand, { color: colors.brand }]}>Penny</Text>
           <Text style={[styles.period, { color: colors.inkMuted }]}>{periodLabel}</Text>
         </View>
         <Pressable

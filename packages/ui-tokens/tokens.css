@@ -5,8 +5,8 @@
   --cm-ink: #101828;
   --cm-ink-secondary: #667085;
   --cm-ink-muted: #98a2b3;
-  --cm-brand: #5b5ce2;
-  --cm-brand-tint: #eef0ff;
+  --cm-brand: #1ec569;
+  --cm-brand-tint: #e8f9ef;
   --cm-income: #159a72;
   --cm-expense: #d95d5d;
   --cm-warning: #c78324;
@@ -44,7 +44,7 @@
   --cm-ink-muted: #667085;
   --cm-border: #27334a;
   --cm-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  --cm-brand-tint: #1c1f3a;
+  --cm-brand-tint: #123528;
 }
 
 @media (prefers-reduced-motion: reduce) {

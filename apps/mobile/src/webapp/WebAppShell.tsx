@@ -104,7 +104,7 @@ function ExpoGoLivePreview({ entryUrl }: { entryUrl: string }) {
           : {}),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not open Clear Money');
+      setError(err instanceof Error ? err.message : 'Could not open Penny');
     } finally {
       setBusy(false);
     }
@@ -121,7 +121,7 @@ function ExpoGoLivePreview({ entryUrl }: { entryUrl: string }) {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <StatusBar style="dark" />
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>Clear Money</Text>
+        <Text style={styles.fallbackTitle}>Penny</Text>
         <Text style={styles.fallbackBody}>
           Expo Go can’t embed the app (WebView). Opening the live product for
           testing — same setup, sign-in / skip, and guest flows as production.
@@ -140,7 +140,7 @@ function ExpoGoLivePreview({ entryUrl }: { entryUrl: string }) {
 }
 
 /**
- * Full-screen embedded shell of the production Clear Money web app.
+ * Full-screen embedded shell of the production Penny web app.
  * Expo Go: live-tests via in-app browser. APK/IPA: native WebView.
  */
 export function WebAppShell() {
@@ -315,7 +315,7 @@ export function WebAppShell() {
           }}
           onError={(e) => {
             finishBoot();
-            setError(e.nativeEvent.description || 'Failed to load Clear Money');
+            setError(e.nativeEvent.description || 'Failed to load Penny');
           }}
           onHttpError={(e) => {
             if (e.nativeEvent.statusCode >= 500) {
@@ -332,14 +332,14 @@ export function WebAppShell() {
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback
           userAgent={Platform.OS === 'android' ? ANDROID_CHROME_UA : undefined}
-          applicationNameForUserAgent="ClearMoneyApp"
+          applicationNameForUserAgent="PennyApp"
           pullToRefreshEnabled
         />
 
         {booting ? (
           <View style={styles.loading} pointerEvents="none">
             <ActivityIndicator size="large" color={colors.brand} />
-            <Text style={styles.loadingText}>Loading Clear Money…</Text>
+            <Text style={styles.loadingText}>Loading Penny…</Text>
           </View>
         ) : null}
       </View>

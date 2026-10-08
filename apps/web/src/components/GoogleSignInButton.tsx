@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '@/lib/i18n';
 import { ApiError, apiFetch, startGoogleSignIn } from '@/lib/api';
+import { snapshotGuestLedger } from '@/lib/guest-migrate';
 import { Button } from '@/components/ui/button';
 
 /** Google rejects OAuth redirect_uri on private LAN IPs (192.168/10/172.16). */
@@ -52,6 +53,8 @@ export function GoogleSignInButton({
     setBusy(true);
     setError(null);
     try {
+      // Preserve guest ledger for transfer if Google creates a new empty account.
+      snapshotGuestLedger();
       if (onLan) {
         // Finish Google on loopback so redirect_uri is localhost (allowed by Google).
         const path = `/auth/sign-in?google=1&next=${encodeURIComponent(next)}`;

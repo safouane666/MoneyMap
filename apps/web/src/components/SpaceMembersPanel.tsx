@@ -5,7 +5,6 @@ import { Copy, Check, Trash2 } from 'lucide-react';
 import { ApiError, apiFetch } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -49,7 +48,6 @@ export function SpaceMembersPanel({
   const canManage = can(role, 'manage_members');
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
-  const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<(typeof INVITE_ROLES)[number]>('contributor');
   const [loading, setLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
@@ -86,7 +84,7 @@ export function SpaceMembersPanel({
         `/spaces/${spaceId}/members/invite`,
         {
           method: 'POST',
-          body: JSON.stringify({ email, role: inviteRole }),
+          body: JSON.stringify({ openLink: true, role: inviteRole }),
         },
       );
       if (result.offline || !result.data) {
@@ -95,7 +93,6 @@ export function SpaceMembersPanel({
       }
       const link = `${window.location.origin}${result.data.acceptPath}`;
       setInviteLink(link);
-      setEmail('');
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('spaces.inviteFailed'));
@@ -233,17 +230,6 @@ export function SpaceMembersPanel({
           <p className="text-sm text-ink-secondary">{t('spaces.inviteBody')}</p>
           <form className="space-y-3" onSubmit={onInvite}>
             <div className="space-y-2">
-              <Label htmlFor="invite-email">{t('auth.email')}</Label>
-              <Input
-                id="invite-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="friend@email.com"
-                required
-              />
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="invite-role">{t('spaces.role')}</Label>
               <Select
                 value={inviteRole}
@@ -261,7 +247,7 @@ export function SpaceMembersPanel({
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={loading || !email.trim()}>
+            <Button type="submit" disabled={loading}>
               {loading ? t('spaces.inviting') : t('spaces.invite')}
             </Button>
           </form>
@@ -280,7 +266,7 @@ export function SpaceMembersPanel({
           {invites.length ? (
             <div className="space-y-2">
               <h4 className="text-sm font-medium text-ink-secondary">{t('spaces.pendingInvites')}</h4>
-              <p className="text-xs text-ink-muted">{t('spaces.inviteEmailHint')}</p>
+              <p className="text-xs text-ink-muted">{t('spaces.inviteLinkHint')}</p>
               <ul className="space-y-2">
                 {invites.map((invite) => (
                   <li
@@ -288,7 +274,8 @@ export function SpaceMembersPanel({
                     className="flex flex-wrap items-center justify-between gap-2 text-sm"
                   >
                     <span className="truncate">
-                      {invite.email} · {roleLabel(invite.role)}
+                      {roleLabel(invite.role)}
+                      {invite.email.endsWith('@penny.local') ? '' : ` · ${invite.email}`}
                     </span>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{invite.status}</Badge>

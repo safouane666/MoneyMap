@@ -2,7 +2,7 @@
   "name": "clear-money",
   "private": true,
   "version": "0.1.0",
-  "description": "Clear Money — one ledger, multiple spaces",
+  "description": "Penny — AI Money Tracker",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "dev": "turbo run dev --parallel",

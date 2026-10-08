@@ -136,7 +136,9 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ id: str
                 </Link>
               </Button>
               <p className="text-center text-xs text-ink-muted">
-                {t('spaces.useInviteEmail', { email: invite.email })}
+                {invite.email?.endsWith('@penny.local') || invite.emailMasked
+                  ? t('spaces.signInToAccept')
+                  : t('spaces.useInviteEmail', { email: invite.email })}
               </p>
             </div>
           )}

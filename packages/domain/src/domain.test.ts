@@ -424,13 +424,16 @@ describe('notification planner', () => {
     userId: 'user_1',
     enabled: true,
     categories: [
-      'daily_mini_report',
-      'daily_spend_fact',
+      'daily_log_reminder',
       'weekly_review',
+      'month_end_report',
+      'subscription_due',
+      'salary_due',
+      'savings_goal',
     ] as const,
     quietHoursStart: 22,
     quietHoursEnd: 7,
-    preferredHour: 9,
+    preferredHour: 19,
     maxDaily: 1,
     maxWeeklyReviews: 1,
     previewMode: 'generic' as const,
@@ -439,7 +442,7 @@ describe('notification planner', () => {
 
   const snapshot = {
     spaceId: 'space_1',
-    periodLabel: '2026-W39',
+    periodLabel: '2026-09-24',
     facts: { spend: 4200 },
     sourceTimestamp: '2026-09-24T10:00:00Z',
     dataFreshness: 'fresh' as const,
@@ -460,7 +463,7 @@ describe('notification planner', () => {
     expect(diff.schedule).toHaveLength(0);
   });
 
-  it('caps daily engagement and rebuilds fingerprints', () => {
+  it('schedules daily + weekly cadence and rebuilds fingerprints', () => {
     const diff = planNotifications({
       preferences: { ...basePrefs, categories: [...basePrefs.categories] },
       snapshot,
@@ -468,7 +471,8 @@ describe('notification planner', () => {
       nowIso: '2026-09-24T10:00:00Z',
       localHour: 10,
     });
-    expect(diff.schedule.filter((s) => s.type !== 'weekly_review')).toHaveLength(1);
+    expect(diff.schedule.some((s) => s.type === 'daily_log_reminder')).toBe(true);
+    expect(diff.schedule.some((s) => s.type === 'weekly_review')).toBe(true);
     expect(diff.cancelFingerprints).toContain('old:fp');
   });
 
@@ -486,8 +490,7 @@ describe('notification planner', () => {
   it('schedules savings_goal only when pace is tight or behind', () => {
     const prefs = {
       ...basePrefs,
-      maxDaily: 5,
-      categories: [...basePrefs.categories, 'savings_goal'] as const,
+      categories: [...basePrefs.categories] as const,
     };
     const onTrack = planNotifications({
       preferences: prefs,
@@ -508,11 +511,10 @@ describe('notification planner', () => {
     expect(tight.schedule.some((s) => s.type === 'savings_goal')).toBe(true);
   });
 
-  it('schedules subscription_due when due soon or within notify window', () => {
+  it('schedules subscription_due and salary_due within notify windows', () => {
     const prefs = {
       ...basePrefs,
-      maxDaily: 5,
-      categories: [...basePrefs.categories, 'subscription_due'] as const,
+      categories: [...basePrefs.categories] as const,
     };
     const far = planNotifications({
       preferences: prefs,
@@ -530,25 +532,39 @@ describe('notification planner', () => {
       preferences: prefs,
       snapshot: {
         ...snapshot,
-        facts: { ...snapshot.facts, hoursUntilSubscriptionDue: 12 },
+        facts: {
+          ...snapshot.facts,
+          hoursUntilSubscriptionDue: 12,
+          hoursUntilSalaryDue: 6,
+          salaryDueSoon: 1,
+        },
       },
       existingFingerprints: [],
       nowIso: '2026-09-24T10:00:00Z',
       localHour: 10,
     });
     expect(soon.schedule.some((s) => s.type === 'subscription_due')).toBe(true);
-    expect(soon.schedule.find((s) => s.type === 'subscription_due')?.destination).toBe(
-      '/app/home',
-    );
+    expect(soon.schedule.some((s) => s.type === 'salary_due')).toBe(true);
+  });
+
+  it('schedules month_end_report when flagged', () => {
+    const diff = planNotifications({
+      preferences: { ...basePrefs, categories: [...basePrefs.categories] },
+      snapshot: { ...snapshot, facts: { ...snapshot.facts, planMonthEnd: 1 } },
+      existingFingerprints: [],
+      nowIso: '2026-09-30T10:00:00Z',
+      localHour: 10,
+    });
+    expect(diff.schedule.some((s) => s.type === 'month_end_report')).toBe(true);
   });
 
   it('formats privacy previews', () => {
     expect(formatNotificationPreview('generic', 'Spent 42', 'Summary')).toBe(
-      'Your Clear Money update is ready.',
+      'Your Penny update is ready.',
     );
   });
 
-  it('builds engagement facts from goal pace and recurring due', () => {
+  it('builds engagement facts from goal pace and recurring due by kind', () => {
     const now = new Date('2026-09-24T10:00:00Z');
     const facts = buildEngagementFacts({
       now,
@@ -558,8 +574,15 @@ describe('notification planner', () => {
       ],
       recurring: [
         {
+          kind: 'expense',
           active: true,
           nextDueAt: '2026-09-25T09:00:00Z',
+          notifyHoursBefore: 24,
+        },
+        {
+          kind: 'income',
+          active: true,
+          nextDueAt: '2026-09-24T18:00:00Z',
           notifyHoursBefore: 24,
         },
       ],
@@ -567,6 +590,7 @@ describe('notification planner', () => {
     expect(facts.goalPace).toBe('behind');
     expect(facts.goalTight).toBe(1);
     expect(facts.subscriptionDueSoon).toBe(1);
+    expect(facts.salaryDueSoon).toBe(1);
     expect(facts.hoursUntilSubscriptionDue).toBeGreaterThan(0);
   });
 });

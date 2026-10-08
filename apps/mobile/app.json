@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Clear Money",
-    "slug": "clear-money",
-    "version": "0.1.1",
+    "name": "Penny",
+    "slug": "penny",
+    "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "clearmoney",
+    "scheme": "penny",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#5B5CE2"
+      "backgroundColor": "#1EC569"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.clearmoney.mobile",
+      "bundleIdentifier": "app.penny.mobile",
       "infoPlist": {
         "UIBackgroundModes": [
           "remote-notification"
@@ -25,10 +25,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#5B5CE2"
+        "backgroundColor": "#1EC569"
       },
-      "package": "app.clearmoney.mobile",
-      "versionCode": 2,
+      "package": "app.penny.mobile",
+      "versionCode": 1,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
@@ -42,7 +42,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",
-          "backgroundColor": "#5B5CE2",
+          "backgroundColor": "#1EC569",
           "imageWidth": 220
         }
       ],
@@ -50,7 +50,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#5B5CE2"
+          "color": "#1EC569"
         }
       ]
     ],

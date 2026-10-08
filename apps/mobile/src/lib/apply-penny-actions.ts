@@ -378,11 +378,7 @@ export async function applyPennyActions(
         continue;
       }
       if (action.type === 'invite_member') {
-        await inviteSpaceMember(
-          spaceId,
-          String(action.email),
-          String(action.role || 'contributor'),
-        );
+        await inviteSpaceMember(spaceId, String(action.role || 'contributor'));
         applied += 1;
       }
     } catch (err) {

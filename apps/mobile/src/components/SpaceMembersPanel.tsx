@@ -5,7 +5,6 @@ import {
   Share,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { can, type SpaceRole } from '@clear-money/domain';
@@ -47,7 +46,6 @@ export function SpaceMembersPanel({
   const canManage = can(role, 'manage_members');
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
-  const [email, setEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<(typeof INVITE_ROLES)[number]>('contributor');
   const [busy, setBusy] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -138,18 +136,9 @@ export function SpaceMembersPanel({
           <Text style={{ color: colors.inkSecondary, fontWeight: '600', fontSize: 13 }}>
             {t(locale, 'spaces.inviteTitle')}
           </Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="friend@email.com"
-            placeholderTextColor={colors.inkMuted}
-            style={[
-              styles.input,
-              { borderColor: colors.border, color: colors.ink, backgroundColor: colors.canvas },
-            ]}
-          />
+          <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+            {t(locale, 'spaces.inviteBody')}
+          </Text>
           <View style={styles.types}>
             {INVITE_ROLES.map((r) => {
               const on = inviteRole === r;
@@ -177,16 +166,15 @@ export function SpaceMembersPanel({
             <Text style={{ color: colors.inkSecondary, fontSize: 12 }}>{inviteLink}</Text>
           ) : null}
           <Pressable
-            disabled={busy || !email.trim()}
+            disabled={busy}
             onPress={() => {
               void (async () => {
                 setBusy(true);
                 setError(null);
                 try {
-                  const result = await inviteSpaceMember(spaceId, email, inviteRole);
+                  const result = await inviteSpaceMember(spaceId, inviteRole);
                   const link = `${getWebOrigin()}${result.acceptPath}`;
                   setInviteLink(link);
-                  setEmail('');
                   await load();
                   await Share.share({ message: link }).catch(() => undefined);
                 } catch (err) {
@@ -196,7 +184,7 @@ export function SpaceMembersPanel({
                 }
               })();
             }}
-            style={[styles.cta, { backgroundColor: colors.brand, opacity: busy || !email.trim() ? 0.5 : 1 }]}
+            style={[styles.cta, { backgroundColor: colors.brand, opacity: busy ? 0.5 : 1 }]}
           >
             <Text style={{ color: '#fff', fontWeight: '700' }}>{t(locale, 'spaces.invite')}</Text>
           </Pressable>
@@ -205,7 +193,7 @@ export function SpaceMembersPanel({
               <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{t(locale, 'spaces.pendingInvites')}</Text>
               {invites.map((inv) => (
                 <Text key={inv.id} style={{ color: colors.inkSecondary, fontSize: 12 }}>
-                  {inv.email} · {inv.role} · {inv.status}
+                  {inv.role} · {inv.status}
                 </Text>
               ))}
             </View>

@@ -95,6 +95,13 @@ function SignInForm() {
           {t('auth.submitSignIn')}
         </Button>
       </form>
+      {searchParams.get('skip') === '1' ? (
+        <p className="mt-4 text-center">
+          <Link href="/app/home" className="text-sm font-medium text-brand hover:underline">
+            {t('setup.skipAccount')}
+          </Link>
+        </p>
+      ) : null}
       <p className="mt-4 text-center text-sm text-ink-secondary">
         {t('auth.noAccount')}{' '}
         <Link

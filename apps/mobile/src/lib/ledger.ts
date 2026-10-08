@@ -741,12 +741,17 @@ export async function deleteGoal(spaceId: string, goalId: string): Promise<void>
 
 export async function inviteSpaceMember(
   spaceId: string,
-  email: string,
   role: string,
+  email?: string,
 ): Promise<{ id: string; acceptPath: string }> {
+  const trimmed = email?.trim().toLowerCase() ?? '';
   const res = await apiFetch(`/spaces/${spaceId}/members/invite`, {
     method: 'POST',
-    body: JSON.stringify({ email: email.trim().toLowerCase(), role }),
+    body: JSON.stringify(
+      trimmed
+        ? { email: trimmed, role }
+        : { openLink: true, role },
+    ),
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as { id: string; acceptPath: string };

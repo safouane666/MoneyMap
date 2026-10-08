@@ -4,7 +4,7 @@ import { formatMinorUnits } from '@clear-money/domain';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useI18n } from '@/lib/i18n';
 
-const COLORS = ['#5B5CE2', '#159A72', '#D95D5D', '#C78324', '#3B82F6', '#8B5CF6'];
+const COLORS = ['#1EC569', '#159A72', '#D95D5D', '#C78324', '#3B82F6', '#8B5CF6'];
 
 interface CategoryBreakdownProps {
   items: Array<{ name: string; amountMinor: number }>;

@@ -2,7 +2,7 @@ import type { OfflineTransaction } from '../offline/queue';
 import { getSessionCookie } from './session';
 
 /**
- * Base URL for the Clear Money API.
+ * Base URL for the Penny API.
  * Release / EAS profiles must set EXPO_PUBLIC_API_URL to https://YOUR_DOMAIN/cm-api
  * (never localhost or LAN). Paths below are relative to that base (e.g. /auth/…, /spaces/…).
  */

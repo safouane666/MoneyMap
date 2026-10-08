@@ -13,7 +13,7 @@
   "nav.notifications": "Notifications",
 
   "setup.progress": "{step} sur {total}",
-  "setup.welcome.title": "Bienvenue sur Clear Money",
+  "setup.welcome.title": "Bienvenue sur Penny",
   "setup.welcome.body": "Un registre calme pour chaque espace de votre vie.",
   "setup.welcome.cta": "Commencer",
   "setup.welcome.signIn": "Connexion",
@@ -26,7 +26,7 @@
   "setup.notifications.body": "Faits quotidiens et bilans hebdomadaires optionnels. Vous gardez le contrôle.",
   "setup.notifications.enable": "Activer les rappels",
   "setup.notifications.notNow": "Pas maintenant",
-  "setup.intro.title": "Comment fonctionne Clear Money",
+  "setup.intro.title": "Comment fonctionne Penny",
   "setup.intro.skip": "Passer l'intro",
   "setup.intro.continue": "Continuer",
   "setup.intro.card1.title": "Un registre",
@@ -211,7 +211,7 @@
   "notifications.weeklyReview": "Votre bilan de la semaine",
   "notifications.gentleInactivity": "Un rappel discret pour faire le point",
   "notifications.testBurstDone": "Notifications de test terminées",
-  "notifications.body.generic": "Votre mise à jour Clear Money est prête.",
+  "notifications.body.generic": "Votre mise à jour Penny est prête.",
   "notifications.body.dailyMiniReport": "Ouvrez Rapports pour le résumé du jour.",
   "notifications.body.dailySpendFact": "Comparez aujourd'hui à vos habitudes.",
   "notifications.body.timePattern": "Voyez quand vous dépensez le plus.",
@@ -249,6 +249,6 @@
   "auth.hasAccount": "Déjà un compte ?",
   "auth.google": "Continuer avec Google",
 
-  "brand.name": "Clear Money",
-  "brand.tagline": "Un registre, plusieurs espaces."
+  "brand.name": "Penny",
+  "brand.tagline": "AI Money Tracker"
 }

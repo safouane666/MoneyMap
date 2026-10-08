@@ -1184,13 +1184,13 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         deleteRecurring,
         createSpace,
         setSpace,
-        inviteMember: async (email, role) => {
+        inviteMember: async (_email, role) => {
           const res = await apiFetch(`/spaces/${space.id}/members/invite`, {
             method: 'POST',
-            body: JSON.stringify({ email, role }),
+            body: JSON.stringify({ openLink: true, role }),
           });
           if (res.offline || !res.data) {
-            throw new Error('Could not send invite');
+            throw new Error('Could not create invite link');
           }
         },
       });

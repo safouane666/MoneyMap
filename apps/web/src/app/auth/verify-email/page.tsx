@@ -3,16 +3,17 @@
 import Link from 'next/link';
 import { AuthShell } from '@/components/AuthShell';
 import { Button } from '@/components/ui/button';
-import { useI18n } from '@/lib/i18n';
 
+/** Email verification is not enabled (no transactional email yet). */
 export default function VerifyEmailPage() {
-  const { t } = useI18n();
   return (
     <AuthShell>
-      <h1 className="text-2xl font-semibold tracking-tight">{t('auth.verifyTitle')}</h1>
-      <p className="mt-3 text-ink-secondary">{t('auth.verifyBody')}</p>
+      <h1 className="text-2xl font-semibold tracking-tight">You&apos;re all set</h1>
+      <p className="mt-3 text-ink-secondary">
+        Email verification isn&apos;t required for this release. Continue to your ledger.
+      </p>
       <Button asChild className="mt-8 w-full">
-        <Link href="/app/home">{t('setup.continue')}</Link>
+        <Link href="/app/home">Continue</Link>
       </Button>
     </AuthShell>
   );

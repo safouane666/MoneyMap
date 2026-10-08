@@ -64,7 +64,10 @@ export default function SetupReadyPage() {
             <Link href="/auth/sign-up">{t('nav.signUp')}</Link>
           </Button>
           <Button asChild size="lg" variant="outline">
-            <Link href="/app/home">{t('setup.skip')}</Link>
+            <Link href="/auth/sign-in?skip=1&next=/app/home">{t('nav.signIn')}</Link>
+          </Button>
+          <Button asChild size="lg" variant="ghost">
+            <Link href="/app/home">{t('setup.skipAccount')}</Link>
           </Button>
         </div>
       </div>

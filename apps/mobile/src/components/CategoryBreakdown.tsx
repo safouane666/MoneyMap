@@ -4,7 +4,7 @@ import { t } from '../lib/i18n';
 import { useThemeColors } from '../theme/ThemeContext';
 import { space } from '../theme/tokens';
 
-const CHART_COLORS = ['#5B5CE2', '#159A72', '#D95D5D', '#C78324', '#3B82F6', '#8B5CF6'];
+const CHART_COLORS = ['#1EC569', '#159A72', '#D95D5D', '#C78324', '#3B82F6', '#8B5CF6'];
 
 /**
  * Bar + legend breakdown. Avoids react-native-svg so Expo Go (New Arch) does not

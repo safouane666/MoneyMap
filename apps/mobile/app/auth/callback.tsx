@@ -11,7 +11,7 @@ import { loadSetupSession } from '../../src/lib/setup-session';
 import { colors, space } from '../../src/theme/tokens';
 
 /**
- * Deep-link landing after Google OAuth (`clearmoney://auth/callback` /
+ * Deep-link landing after Google OAuth (`penny://auth/callback` /
  * `exp://…/--/auth/callback`). Also used when openAuthSessionAsync returns
  * while the app is backgrounded.
  */
@@ -82,7 +82,7 @@ export default function AuthCallbackScreen() {
 
   return (
     <View style={styles.box}>
-      <Text style={styles.title}>Clear Money</Text>
+      <Text style={styles.title}>Penny</Text>
       {error ? (
         <Text style={styles.error}>{error}</Text>
       ) : (

@@ -25,7 +25,7 @@ export function SetupShell({
       <AuroraBackdrop />
 
       <View style={styles.header}>
-        <Text style={styles.brand}>Clear Money</Text>
+        <Text style={styles.brand}>Penny</Text>
         <Text style={styles.stepLabel}>
           {meta.step}/{total}
         </Text>

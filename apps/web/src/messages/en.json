@@ -1,6 +1,6 @@
 {
-  "brand": "Clear Money",
-  "tagline": "One calm ledger for every space in your life.",
+  "brand": "Penny",
+  "tagline": "AI Money Tracker — one calm ledger for every space.",
   "nav": {
     "home": "Home",
     "activity": "Activity",
@@ -10,26 +10,153 @@
     "settings": "Settings",
     "account": "Account",
     "pricing": "Pricing",
+    "features": "Features",
+    "reviews": "Reviews",
     "signIn": "Sign in",
     "signUp": "Get started",
     "add": "Add",
     "ai": "Ask Penny"
   },
+  "footer": {
+    "product": "Product",
+    "legal": "Legal",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "contact": "Contact",
+    "rights": "All rights reserved."
+  },
   "landing": {
-    "promise": "Track money without the noise.",
-    "support": "Clear Money keeps personal, household, and shared ledgers calm, private, and in one place.",
-    "ctaPrimary": "Start free setup",
-    "ctaSecondary": "See pricing",
-    "useCasesTitle": "Built for real life",
-    "useCases": {
-      "personal": "Personal spending with quiet clarity",
-      "household": "Household bills without shared confusion",
-      "shared": "Shared spaces with clear roles"
+    "promise": "Your AI money tracker — clear, calm, always with you.",
+    "support": "See safe-to-spend at a glance, log in seconds, and keep personal or shared spaces in one private ledger.",
+    "ctaPrimary": "Start free",
+    "ctaSecondary": "Ratings & reviews",
+    "ctaPricing": "See pricing",
+    "demo": {
+      "month": "This month",
+      "live": "Live demo",
+      "net": "Net result",
+      "income": "Income",
+      "expenses": "Expenses",
+      "safe": "Safe to spend",
+      "row1": "Groceries",
+      "row2": "Freelance",
+      "row3": "Transit"
     },
+    "whatsNewEyebrow": "What’s new",
+    "whatsNewTitle": "Built like a modern money app — not a spreadsheet.",
+    "whatsNewBody": "The latest Penny release focuses on Home clarity, smarter reminders, and spaces that stay simple when life is shared.",
+    "features": {
+      "safeSpend": {
+        "title": "Safe to spend",
+        "body": "Home shows net, income, expenses, then what you can still spend — so every day starts clear."
+      },
+      "spaces": {
+        "title": "Personal & shared spaces",
+        "body": "Keep your own ledger, a household pot, or invite people with a private link — no email spam."
+      },
+      "categories": {
+        "title": "Categories that fit",
+        "body": "Log with a fast category grid, customize labels, and see where money actually goes."
+      },
+      "recurring": {
+        "title": "Salary & subscriptions",
+        "body": "Recurring income and bills stay on the map so month-end never surprises you."
+      },
+      "pennyAi": {
+        "title": "Ask Penny",
+        "body": "Your AI companion helps you understand the ledger — coaching without the noise."
+      },
+      "reminders": {
+        "title": "Smart reminders",
+        "body": "Daily log nudge at 7pm, Sunday weekly wrap-ups, month-end and salary alerts when you want them."
+      },
+      "languages": {
+        "title": "EN · FR · AR",
+        "body": "Setup and coaching in the language you choose — switch anytime."
+      },
+      "privacy": {
+        "title": "Privacy first",
+        "body": "Your history isn’t sold for ads. Sync exists to serve you — not marketers."
+      }
+    },
+    "useCasesTitle": "Made for how money actually lives",
+    "useCasesBody": "One app for solo budgets, household bills, and shared trips — without mixing the stories.",
+    "useCases": {
+      "personal": {
+        "title": "Personal",
+        "body": "Quiet clarity for everyday spending and goals."
+      },
+      "household": {
+        "title": "Household",
+        "body": "Bills and groceries in one space the family can trust."
+      },
+      "shared": {
+        "title": "Shared",
+        "body": "Invite with a link, keep roles clear, stay in sync."
+      }
+    },
+    "reviewsEyebrow": "Loved early",
+    "reviewsTitle": "People use Penny to feel in control again.",
+    "reviewsBody": "Read ratings from early users — or send us yours.",
+    "reviewsCta": "See ratings & reviews",
+    "finalTitle": "Money, mapped with Penny.",
+    "finalBody": "Free to start. Web today — Android on the way. Your calm AI money tracker.",
     "privacyTitle": "Privacy first",
     "privacyBody": "Your ledger stays yours. No ad targeting, no selling your history.",
     "pricingPreviewTitle": "Simple plans",
     "pricingPreviewBody": "Start free with a personal space, one shared invite, and safe-to-spend on Home. Plus adds OCR, extra capacity, and AI volume later."
+  },
+  "reviews": {
+    "title": "Ratings & reviews",
+    "subtitle": "Honest feedback from people trying Penny as their everyday money tracker.",
+    "aggregate": "Average from early community feedback",
+    "writeCta": "Write a review",
+    "inviteTitle": "Tried Penny? Tell us how it feels.",
+    "inviteBody": "Email a short review — what you love, what to improve. We read every note.",
+    "items": {
+      "r1": {
+        "stars": "5",
+        "meta": "Android · beta",
+        "title": "Finally see what I can spend",
+        "body": "Safe-to-spend on Home changed how I check money in the morning. Fast to log, no clutter.",
+        "author": "Maya K."
+      },
+      "r2": {
+        "stars": "5",
+        "meta": "Web",
+        "title": "Household space that actually works",
+        "body": "We share one space for bills. Invite link was simple — no messy email threads.",
+        "author": "Jonas R."
+      },
+      "r3": {
+        "stars": "5",
+        "meta": "Web · FR",
+        "title": "Reminders that feel human",
+        "body": "The 7pm nudge got me logging again. Sunday summary is the only weekly money email I want.",
+        "author": "Camille D."
+      },
+      "r4": {
+        "stars": "4",
+        "meta": "Android",
+        "title": "Penny AI is useful, not noisy",
+        "body": "I ask where groceries went and get a clear answer. Still want more report charts — but solid.",
+        "author": "Omar S."
+      },
+      "r5": {
+        "stars": "5",
+        "meta": "Web · AR",
+        "title": "Arabic setup felt natural",
+        "body": "Chose Arabic at onboarding and the coaching stayed consistent. Categories are easy to customize.",
+        "author": "Lina H."
+      },
+      "r6": {
+        "stars": "5",
+        "meta": "Web",
+        "title": "Calm design, serious tracker",
+        "body": "Looks premium and stays calm. Recurring salary finally lines up with my month.",
+        "author": "Theo P."
+      }
+    }
   },
   "pricing": {
     "title": "Pricing",
@@ -41,12 +168,12 @@
   },
   "setup": {
     "companionName": "Penny",
-    "welcomeTitle": "Welcome to Clear Money",
+    "welcomeTitle": "Welcome to Penny",
     "welcomeBody": "A calm premium tracker for every money space you keep.",
     "languageTitle": "Pick your language",
     "languageBody": "We’ll coach you in the language you choose — change it anytime.",
     "meetTitle": "Meet Penny",
-    "meetBody": "I’m your Clear Money guide — a little coin with a map sense for where your money goes. Let’s set things up together.",
+    "meetBody": "I’m Penny — your AI money tracker guide. Let’s set things up together.",
     "meetCta": "Let’s go",
     "featuresTitle": "Here’s what you get",
     "featuresBody": "Swipe through the highlights, then we’ll finish your preferences.",
@@ -140,7 +267,7 @@
     "shareCard": "Share this month",
     "shareCardCopied": "Summary copied",
     "shareCardCopy": "Copy summary",
-    "shareCardBrand": "Clear Money",
+    "shareCardBrand": "Penny",
     "shareCardSpent": "Spent",
     "shareCardGoal": "Goal",
     "income": "Income",
@@ -261,12 +388,12 @@
       "shared": "Shared"
     },
     "needOnline": "Connect to the API to create spaces and invite friends.",
-    "invite": "Send invite",
-    "inviting": "Sending…",
-    "inviteTitle": "Invite someone",
-    "inviteBody": "Free shared spaces include you plus one invite. Both get the full free ledger.",
-    "inviteFailed": "Could not send invite",
-    "inviteReady": "Invite link ready — send this to your friend:",
+    "invite": "Create invite link",
+    "inviting": "Creating…",
+    "inviteTitle": "Invite with a link",
+    "inviteBody": "Create a link and share it. No email required — they sign in and join.",
+    "inviteFailed": "Could not create invite link",
+    "inviteReady": "Share this link with your friend:",
     "copyLink": "Copy link",
     "copied": "Copied",
     "pendingInvites": "Pending invites",
@@ -284,7 +411,7 @@
     "removeFailed": "Could not remove member",
     "noMembers": "No members yet.",
     "acceptTitle": "You’re invited",
-    "acceptBody": "Join {space} as {role}. Use {email} to accept.",
+    "acceptBody": "Join {space} as {role}.",
     "accept": "Accept invite",
     "accepting": "Joining…",
     "acceptFailed": "Could not accept invite",
@@ -292,8 +419,9 @@
     "inviteNotFound": "This invite link is invalid or expired.",
     "inviteNotPending": "This invite is no longer available.",
     "signInToAccept": "Sign in or create an account to join this space.",
-    "useInviteEmail": "Sign up with {email} so the invite can match.",
-    "inviteEmailHint": "Friends must sign up with the invited email."
+    "useInviteEmail": "Sign in or create an account, then accept.",
+    "inviteEmailHint": "Anyone with the link can join after signing in.",
+    "inviteLinkHint": "Anyone with the link can join after signing in."
   },
   "account": {
     "title": "Account",

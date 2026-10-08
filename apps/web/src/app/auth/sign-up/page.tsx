@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { useI18n } from '@/lib/i18n';
 import { ApiError, apiFetch } from '@/lib/api';
 import { loadSetupSession } from '@/lib/setup-session';
-import { clearLocalSessionCaches } from '@/lib/session-cache';
+import { migrateGuestLedgerToSpace, snapshotGuestLedger } from '@/lib/guest-migrate';
 
 function SignUpForm() {
   const { t } = useI18n();
@@ -29,7 +29,9 @@ function SignUpForm() {
     setLoading(true);
     setError(null);
     try {
-      clearLocalSessionCaches();
+      // Keep guest ledger for transfer into the new account.
+      const guest = snapshotGuestLedger();
+
       const result = await apiFetch<{ user?: { id: string } }>('/auth/sign-up/email', {
         method: 'POST',
         body: JSON.stringify({ name, email, password }),
@@ -47,7 +49,7 @@ function SignUpForm() {
       }).catch(() => null);
 
       const setup = loadSetupSession();
-      const setupResult = await apiFetch('/me/setup-complete', {
+      const setupResult = await apiFetch<{ spaceId?: string }>('/me/setup-complete', {
         method: 'POST',
         body: JSON.stringify({
           locale: setup.language,
@@ -59,6 +61,11 @@ function SignUpForm() {
       if (setupResult.offline) {
         setError(t('auth.serverUnreachable'));
         return;
+      }
+
+      const spaceId = setupResult.data?.spaceId;
+      if (spaceId) {
+        await migrateGuestLedgerToSpace(spaceId, guest);
       }
 
       router.push(next.startsWith('/') ? next : '/app/home');

@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Clear Money smoke', () => {
+test.describe('Penny smoke', () => {
   test('loads landing page', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(page.getByText('Clear Money').first()).toBeVisible();
+    await expect(page.getByText('Penny').first()).toBeVisible();
   });
 
   test('loads setup welcome', async ({ page }) => {

@@ -34,7 +34,7 @@ export default function SignUpScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <AuroraBackdrop />
-      <Text style={styles.brand}>Clear Money</Text>
+      <Text style={styles.brand}>Penny</Text>
       <View style={styles.penny}>
         <PennyAvatar pose="cheer" size="lg" />
       </View>

@@ -11,10 +11,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Clear Money',
-    template: '%s · Clear Money',
+    default: 'Penny — AI Money Tracker',
+    template: '%s · Penny',
   },
-  description: 'Calm premium money tracker — one ledger, multiple spaces.',
+  description:
+    'Penny is your AI money tracker — safe-to-spend, spaces, categories, reminders, and a calm ledger for personal and shared life.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

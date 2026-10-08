@@ -53,7 +53,15 @@ export function getAuth(): AuthApi {
           /* ignore */
         }
       }
-      return [...config.webOrigins, 'clearmoney://', ...extras];
+      return [
+        ...config.webOrigins,
+        // Native deep-link schemes (Expo Go uses exp:// / exps://).
+        'penny://',
+        'clearmoney://',
+        'exp://',
+        'exps://',
+        ...extras,
+      ];
     },
     emailAndPassword: { enabled: true },
     account: {

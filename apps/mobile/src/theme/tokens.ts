@@ -1,5 +1,5 @@
 /**
- * Clear Money tokens mirrored for React Native StyleSheet.
+ * Penny design tokens mirrored for React Native StyleSheet.
  * Source of truth for web: packages/ui-tokens/tokens.css
  */
 export const colors = {
@@ -9,8 +9,8 @@ export const colors = {
   ink: '#101828',
   inkSecondary: '#667085',
   inkMuted: '#98A2B3',
-  brand: '#5B5CE2',
-  brandTint: '#EEF0FF',
+  brand: '#1EC569',
+  brandTint: '#E8F9EF',
   income: '#159A72',
   expense: '#D95D5D',
   warning: '#C78324',
@@ -26,8 +26,8 @@ export const colorsDark = {
   ink: '#F8FAFC',
   inkSecondary: '#98A2B3',
   inkMuted: '#667085',
-  brand: '#5B5CE2',
-  brandTint: '#1C1F3A',
+  brand: '#1EC569',
+  brandTint: '#123528',
   income: '#159A72',
   expense: '#D95D5D',
   warning: '#C78324',

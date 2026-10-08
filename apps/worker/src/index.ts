@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   await pingDb(db);
 
   console.log(
-    `[worker] Clear Money worker listening for jobs: ${JOB_TYPES.join(', ')}`,
+    `[worker] Penny worker listening for jobs: ${JOB_TYPES.join(', ')}`,
   );
   if (!process.env.AI_API_KEY) {
     console.warn(

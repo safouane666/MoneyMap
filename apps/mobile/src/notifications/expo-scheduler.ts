@@ -27,7 +27,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 function resolveTitle(locale: string, titleKey: string): string {
   const translated = t(locale, titleKey);
-  return translated === titleKey ? 'Clear Money' : translated;
+  return translated === titleKey ? 'Penny' : translated;
 }
 
 function resolveBody(locale: string, planned: PlannedNotification): string {
@@ -84,62 +84,41 @@ export async function createExpoNotificationScheduler(
   };
 }
 
-/** Dense near-term burst so a sideloaded APK can verify delivery quickly. */
+/** Short near-term burst so a sideloaded APK can verify delivery quickly. */
 export async function scheduleNotificationBurst(locale = 'en'): Promise<number> {
   const samples: { title: string; body: string; delaySec: number }[] = [
     {
-      title: t(locale, 'notifications.dailyMiniReport'),
-      body: t(locale, 'notifications.body.dailyMiniReport'),
+      title: t(locale, 'notifications.dailyLogReminder'),
+      body: t(locale, 'notifications.body.dailyLogReminder'),
       delaySec: 8,
-    },
-    {
-      title: t(locale, 'notifications.dailySpendFact'),
-      body: t(locale, 'notifications.body.dailySpendFact'),
-      delaySec: 20,
-    },
-    {
-      title: t(locale, 'notifications.safeToSpend'),
-      body: t(locale, 'notifications.body.safeToSpend'),
-      delaySec: 35,
-    },
-    {
-      title: t(locale, 'notifications.savingsGoal'),
-      body: t(locale, 'notifications.body.savingsGoal'),
-      delaySec: 50,
-    },
-    {
-      title: t(locale, 'notifications.subscriptionDue'),
-      body: t(locale, 'notifications.body.subscriptionDue'),
-      delaySec: 70,
-    },
-    {
-      title: t(locale, 'notifications.categoryChange'),
-      body: t(locale, 'notifications.body.categoryChange'),
-      delaySec: 90,
-    },
-    {
-      title: t(locale, 'notifications.timePattern'),
-      body: t(locale, 'notifications.body.timePattern'),
-      delaySec: 110,
     },
     {
       title: t(locale, 'notifications.weeklyReview'),
       body: t(locale, 'notifications.body.weeklyReview'),
-      delaySec: 130,
+      delaySec: 25,
     },
     {
-      title: t(locale, 'notifications.gentleInactivity'),
-      body: t(locale, 'notifications.body.gentleInactivity'),
-      delaySec: 150,
+      title: t(locale, 'notifications.monthEndReport'),
+      body: t(locale, 'notifications.body.monthEndReport'),
+      delaySec: 45,
+    },
+    {
+      title: t(locale, 'notifications.subscriptionDue'),
+      body: t(locale, 'notifications.body.subscriptionDue'),
+      delaySec: 65,
+    },
+    {
+      title: t(locale, 'notifications.salaryDue'),
+      body: t(locale, 'notifications.body.salaryDue'),
+      delaySec: 85,
     },
     {
       title: t(locale, 'notifications.testBurstDone'),
       body: t(locale, 'notifications.body.testBurstDone'),
-      delaySec: 170,
+      delaySec: 105,
     },
   ];
 
-  // Clear previous test burst ids so re-tapping doesn't pile up forever.
   const pending = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     pending

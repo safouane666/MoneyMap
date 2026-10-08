@@ -115,7 +115,7 @@ export function createApp() {
   /**
    * Native Google OAuth start (system browser).
    * Sets Better Auth state cookies in THIS browser jar, then 302 → Google.
-   * Query: `to` = deep link (clearmoney://… / exp://…), optional `migrate=1`.
+   * Query: `to` = deep link (penny://… / clearmoney://… / exp://…), optional `migrate=1`.
    */
   app.get('/public/mobile-google-oauth', async (c) => {
     if (!config.googleClientId || !config.googleClientSecret) {
@@ -123,6 +123,7 @@ export function createApp() {
     }
     const to = c.req.query('to')?.trim() || '';
     if (
+      !to.startsWith('penny://') &&
       !to.startsWith('clearmoney://') &&
       !to.startsWith('exp://') &&
       !to.startsWith('exps://')
@@ -202,8 +203,9 @@ export function createApp() {
 
   /** After Google → Better Auth: hand session cookie to the native deep link. */
   app.get('/public/mobile-google-done', (c) => {
-    const to = c.req.query('to')?.trim() || 'clearmoney://auth/callback';
+    const to = c.req.query('to')?.trim() || 'penny://auth/callback';
     if (
+      !to.startsWith('penny://') &&
       !to.startsWith('clearmoney://') &&
       !to.startsWith('exp://') &&
       !to.startsWith('exps://')
@@ -244,12 +246,12 @@ export function createApp() {
 
     return c.html(`<!doctype html><html><head><meta charset="utf-8"/>
       <meta name="viewport" content="width=device-width,initial-scale=1"/>
-      <title>Opening Clear Money</title></head>
+      <title>Opening Penny</title></head>
       <body style="font-family:system-ui;padding:2rem;text-align:center;background:#F7F8FA;color:#111">
-        <p style="font-size:1.125rem;font-weight:600">Opening Clear Money…</p>
+        <p style="font-size:1.125rem;font-weight:600">Opening Penny…</p>
         <p style="color:#666;font-size:0.875rem">You can close this tab after the app opens.</p>
         <p style="margin-top:1.5rem"><a href="${href.replace(/"/g, '&quot;')}"
-          style="display:inline-block;background:#5B5CE2;color:#fff;padding:0.6rem 1rem;border-radius:10px;text-decoration:none;font-weight:600">Open app</a></p>
+          style="display:inline-block;background:#1EC569;color:#fff;padding:0.6rem 1rem;border-radius:10px;text-decoration:none;font-weight:600">Open app</a></p>
         <script>try{location.replace(${JSON.stringify(href)})}catch(e){}
         setTimeout(function(){try{location.href=${JSON.stringify(href)}}catch(e){}},400);</script>
       </body></html>`);
@@ -409,11 +411,12 @@ export function createApp() {
           userId,
           enabled: body.notificationEnabled,
           categories: [
-            'daily_mini_report',
+            'daily_log_reminder',
             'weekly_review',
-            'savings_goal',
+            'month_end_report',
             'subscription_due',
-            'gentle_inactivity',
+            'salary_due',
+            'savings_goal',
           ],
           timezone: profile.timezone,
         })
@@ -1191,9 +1194,12 @@ export function createApp() {
       return c.json({ error: decision.reason }, 402);
     }
 
-    const body = await c.req.json<{ email: string; role?: string }>();
-    const email = body.email?.trim().toLowerCase();
-    if (!email || !email.includes('@')) return c.json({ error: 'Valid email required' }, 400);
+    const body = await c.req.json<{ email?: string; role?: string; openLink?: boolean }>();
+    // Link-only invites (no outbound email): store a sentinel address and skip match on accept.
+    const rawEmail = body.email?.trim().toLowerCase() ?? '';
+    const openLink = body.openLink === true || !rawEmail;
+    const email = openLink ? `open-${createId('lnk')}@penny.local` : rawEmail;
+    if (!openLink && !email.includes('@')) return c.json({ error: 'Valid email required' }, 400);
     const role = body.role ?? 'contributor';
     const allowedRoles = new Set(['admin', 'contributor', 'viewer', 'child']);
     if (!allowedRoles.has(role)) return c.json({ error: 'Invalid role' }, 400);
@@ -1270,7 +1276,8 @@ export function createApp() {
 
     const profile = (await db().select().from(user).where(eq(user.id, userId)).limit(1))[0];
     if (!profile) return c.json({ error: 'User not found' }, 404);
-    if (profile.email.toLowerCase() !== row.email.toLowerCase()) {
+    const openInvite = row.email.toLowerCase().endsWith('@penny.local');
+    if (!openInvite && profile.email.toLowerCase() !== row.email.toLowerCase()) {
       return c.json(
         {
           error: 'Sign in with the invited email address to accept this invite',
@@ -2165,7 +2172,7 @@ export function createApp() {
             currency: 'usd',
             unit_amount: Math.round(Number(process.env.PLAN_PLUS_MONTHLY_PRICE ?? 4.99) * 100),
             recurring: { interval: 'month' },
-            product_data: { name: 'Clear Money Plus' },
+            product_data: { name: 'Penny Plus' },
           },
         },
       ],

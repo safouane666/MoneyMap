@@ -51,7 +51,7 @@ export default function Index() {
 
   return (
     <View style={styles.box}>
-      <Text style={styles.title}>Clear Money</Text>
+      <Text style={styles.title}>Penny</Text>
       <ActivityIndicator color={colors.brand} size="large" />
       <Text style={styles.hint}>{hint}</Text>
     </View>

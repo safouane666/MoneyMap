@@ -1,6 +1,6 @@
 {
-  "brand": "Clear Money",
-  "tagline": "Un registre calme pour chaque espace de votre vie.",
+  "brand": "Penny",
+  "tagline": "AI Money Tracker — un registre calme pour chaque espace.",
   "nav": {
     "home": "Accueil",
     "activity": "Activité",
@@ -9,27 +9,154 @@
     "goals": "Objectifs",
     "settings": "Réglages",
     "pricing": "Tarifs",
+    "features": "Fonctionnalités",
+    "reviews": "Avis",
     "signIn": "Connexion",
     "signUp": "Commencer",
     "add": "Ajouter",
     "ai": "Demander à Penny",
     "account": "Compte"
   },
+  "footer": {
+    "product": "Produit",
+    "legal": "Légal",
+    "privacy": "Confidentialité",
+    "terms": "Conditions",
+    "contact": "Contact",
+    "rights": "Tous droits réservés."
+  },
   "landing": {
-    "promise": "Suivez votre argent sans le bruit.",
-    "support": "Clear Money garde vos registres personnels, familiaux et partagés calmes, privés et au même endroit.",
-    "ctaPrimary": "Démarrer la configuration",
-    "ctaSecondary": "Voir les tarifs",
-    "useCasesTitle": "Pensé pour la vraie vie",
-    "useCases": {
-      "personal": "Dépenses personnelles en toute clarté",
-      "household": "Factures du foyer sans confusion",
-      "shared": "Espaces partagés avec des rôles clairs"
+    "promise": "Votre tracker d’argent IA — clair, calme, toujours avec vous.",
+    "support": "Voyez le reste à dépenser d’un coup d’œil, enregistrez en quelques secondes, et gardez vos espaces perso ou partagés dans un registre privé.",
+    "ctaPrimary": "Commencer gratuitement",
+    "ctaSecondary": "Notes et avis",
+    "ctaPricing": "Voir les tarifs",
+    "demo": {
+      "month": "Ce mois",
+      "live": "Démo live",
+      "net": "Résultat net",
+      "income": "Revenus",
+      "expenses": "Dépenses",
+      "safe": "Reste à dépenser",
+      "row1": "Courses",
+      "row2": "Freelance",
+      "row3": "Transport"
     },
+    "whatsNewEyebrow": "Nouveautés",
+    "whatsNewTitle": "Pensé comme une app moderne — pas un tableur.",
+    "whatsNewBody": "La dernière version de Penny clarifie l’accueil, affine les rappels et simplifie les espaces partagés.",
+    "features": {
+      "safeSpend": {
+        "title": "Reste à dépenser",
+        "body": "L’accueil montre le net, les revenus, les dépenses, puis ce qu’il vous reste — chaque jour commence clair."
+      },
+      "spaces": {
+        "title": "Espaces perso & partagés",
+        "body": "Votre registre, le foyer, ou une invitation par lien privé — sans spam d’e-mails."
+      },
+      "categories": {
+        "title": "Catégories sur mesure",
+        "body": "Saisie rapide, libellés personnalisés, et une vue nette de où va l’argent."
+      },
+      "recurring": {
+        "title": "Salaire & abonnements",
+        "body": "Revenus et factures récurrents restent visibles pour éviter les surprises de fin de mois."
+      },
+      "pennyAi": {
+        "title": "Demander à Penny",
+        "body": "Votre compagnon IA explique le registre — un coaching sans bruit."
+      },
+      "reminders": {
+        "title": "Rappels intelligents",
+        "body": "Nudge quotidien à 19 h, bilan du dimanche, alertes de fin de mois et de salaire."
+      },
+      "languages": {
+        "title": "EN · FR · AR",
+        "body": "Configuration et coaching dans la langue choisie — changez quand vous voulez."
+      },
+      "privacy": {
+        "title": "Vie privée d’abord",
+        "body": "Votre historique n’est pas vendu pour la pub. La synchro sert vous — pas les annonceurs."
+      }
+    },
+    "useCasesTitle": "Pour l’argent tel qu’il vit vraiment",
+    "useCasesBody": "Une app pour budgets solo, factures du foyer et dîners partagés — sans mélanger les histoires.",
+    "useCases": {
+      "personal": {
+        "title": "Personnel",
+        "body": "Clarté calme pour les dépenses et objectifs du quotidien."
+      },
+      "household": {
+        "title": "Foyer",
+        "body": "Factures et courses dans un espace que la famille peut suivre."
+      },
+      "shared": {
+        "title": "Partagé",
+        "body": "Invitez par lien, rôles clairs, toujours synchronisé."
+      }
+    },
+    "reviewsEyebrow": "Premiers avis",
+    "reviewsTitle": "Penny aide à reprendre le contrôle.",
+    "reviewsBody": "Lisez les notes des premiers utilisateurs — ou envoyez la vôtre.",
+    "reviewsCta": "Voir notes et avis",
+    "finalTitle": "L’argent, cartographié avec Penny.",
+    "finalBody": "Gratuit pour commencer. Web aujourd’hui — Android bientôt. Votre tracker IA calme.",
     "privacyTitle": "La vie privée d'abord",
     "privacyBody": "Votre registre vous appartient. Pas de ciblage publicitaire.",
     "pricingPreviewTitle": "Des offres simples",
     "pricingPreviewBody": "Commencez gratuitement. Passez à Plus seulement si besoin."
+  },
+  "reviews": {
+    "title": "Notes et avis",
+    "subtitle": "Retours honnêtes de personnes qui testent Penny au quotidien.",
+    "aggregate": "Moyenne des retours de la communauté early",
+    "writeCta": "Écrire un avis",
+    "inviteTitle": "Vous avez essayé Penny ? Dites-nous.",
+    "inviteBody": "Envoyez un court avis par e-mail — ce que vous aimez, ce qu’il faut améliorer.",
+    "items": {
+      "r1": {
+        "stars": "5",
+        "meta": "Android · bêta",
+        "title": "Enfin je vois ce que je peux dépenser",
+        "body": "Le reste à dépenser sur l’accueil a changé mon matin. Saisie rapide, zéro encombrement.",
+        "author": "Maya K."
+      },
+      "r2": {
+        "stars": "5",
+        "meta": "Web",
+        "title": "Espace foyer qui marche vraiment",
+        "body": "On partage un espace pour les factures. Le lien d’invitation est simple — sans fils d’e-mails.",
+        "author": "Jonas R."
+      },
+      "r3": {
+        "stars": "5",
+        "meta": "Web · FR",
+        "title": "Des rappels humains",
+        "body": "Le rappel à 19 h m’a fait reprendre la saisie. Le résumé du dimanche est le seul mail argent que je veux.",
+        "author": "Camille D."
+      },
+      "r4": {
+        "stars": "4",
+        "meta": "Android",
+        "title": "Penny IA utile, pas bruyante",
+        "body": "Je demande où sont allées les courses et j’ai une réponse claire. Encore des graphiques à venir — mais solide.",
+        "author": "Omar S."
+      },
+      "r5": {
+        "stars": "5",
+        "meta": "Web · AR",
+        "title": "L’arabe dès l’onboarding",
+        "body": "J’ai choisi l’arabe à l’installation et le coaching est resté cohérent. Catégories faciles à personnaliser.",
+        "author": "Lina H."
+      },
+      "r6": {
+        "stars": "5",
+        "meta": "Web",
+        "title": "Design calme, tracker sérieux",
+        "body": "Premium sans gadgets. Le salaire récurrent s’aligne enfin avec mon mois.",
+        "author": "Theo P."
+      }
+    }
   },
   "pricing": {
     "title": "Tarifs",
@@ -41,12 +168,12 @@
   },
   "setup": {
     "companionName": "Penny",
-    "welcomeTitle": "Bienvenue sur Clear Money",
+    "welcomeTitle": "Bienvenue sur Penny",
     "welcomeBody": "Un suivi premium et calme pour chaque espace d'argent.",
     "languageTitle": "Choisissez votre langue",
     "languageBody": "Nous vous guiderons dans la langue choisie — changeable à tout moment.",
     "meetTitle": "Voici Penny",
-    "meetBody": "Je suis votre guide Clear Money — une petite pièce avec le sens de la carte pour vos dépenses. Installons tout ensemble.",
+    "meetBody": "Je suis Penny — votre guide AI Money Tracker. Installons tout ensemble.",
     "meetCta": "Allons-y",
     "featuresTitle": "Voici ce que vous obtenez",
     "featuresBody": "Parcourez les points forts, puis terminons vos préférences.",
@@ -140,7 +267,7 @@
     "shareCard": "Partager ce mois",
     "shareCardCopied": "Résumé copié",
     "shareCardCopy": "Copier le résumé",
-    "shareCardBrand": "Clear Money",
+    "shareCardBrand": "Penny",
     "shareCardSpent": "Dépensé",
     "shareCardGoal": "Objectif",
     "income": "Revenus",

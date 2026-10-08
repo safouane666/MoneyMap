@@ -13,7 +13,7 @@ export default function MeetScreen() {
     <SetupShell stepId="meet">
       <Text style={styles.title}>Meet Penny</Text>
       <Text style={styles.body}>
-        I&apos;m your Clear Money guide — a little coin with a map sense for where your money
+        I&apos;m Penny — your AI money tracker guide for where your money
         goes. Let&apos;s set things up together.
       </Text>
       <PrimaryButton

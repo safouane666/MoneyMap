@@ -1,9 +1,11 @@
 /**
- * Device-local notification sync for Clear Money.
- * Rebuilds on app open / enable / settings; optional dense test burst for QA.
+ * Device-local notification sync for Penny.
+ * Rebuilds on app open / enable / settings — calm cadence only.
  */
 import {
+  DEFAULT_NOTIFICATION_CATEGORIES,
   buildEngagementFacts,
+  stampNotificationTimes,
   type NotificationCategory,
   type NotificationPreference,
   type NotificationSnapshot,
@@ -20,39 +22,37 @@ import {
 import { rebuildNotificationSchedule } from './planner-adapter';
 
 export const ALL_NOTIFICATION_CATEGORIES: NotificationCategory[] = [
-  'daily_spend_fact',
-  'daily_mini_report',
-  'time_pattern',
-  'category_change',
-  'savings_goal',
-  'subscription_due',
-  'safe_to_spend',
-  'weekly_review',
-  'gentle_inactivity',
+  ...DEFAULT_NOTIFICATION_CATEGORIES,
 ];
 
 const TITLE_KEYS: Record<NotificationCategory, string> = {
+  daily_log_reminder: 'notifications.dailyLogReminder',
+  weekly_review: 'notifications.weeklyReview',
+  month_end_report: 'notifications.monthEndReport',
+  subscription_due: 'notifications.subscriptionDue',
+  salary_due: 'notifications.salaryDue',
+  savings_goal: 'notifications.savingsGoal',
   daily_spend_fact: 'notifications.dailySpendFact',
   daily_mini_report: 'notifications.dailyMiniReport',
   time_pattern: 'notifications.timePattern',
   category_change: 'notifications.categoryChange',
-  savings_goal: 'notifications.savingsGoal',
-  subscription_due: 'notifications.subscriptionDue',
   safe_to_spend: 'notifications.safeToSpend',
-  weekly_review: 'notifications.weeklyReview',
-  gentle_inactivity: 'notifications.gentleInactivity',
+  gentle_inactivity: 'notifications.dailyLogReminder',
 };
 
 const BODY_KEYS: Record<NotificationCategory, string> = {
+  daily_log_reminder: 'notifications.body.dailyLogReminder',
+  weekly_review: 'notifications.body.weeklyReview',
+  month_end_report: 'notifications.body.monthEndReport',
+  subscription_due: 'notifications.body.subscriptionDue',
+  salary_due: 'notifications.body.salaryDue',
+  savings_goal: 'notifications.body.savingsGoal',
   daily_spend_fact: 'notifications.body.dailySpendFact',
   daily_mini_report: 'notifications.body.dailyMiniReport',
   time_pattern: 'notifications.body.timePattern',
   category_change: 'notifications.body.categoryChange',
-  savings_goal: 'notifications.body.savingsGoal',
-  subscription_due: 'notifications.body.subscriptionDue',
   safe_to_spend: 'notifications.body.safeToSpend',
-  weekly_review: 'notifications.body.weeklyReview',
-  gentle_inactivity: 'notifications.body.gentleInactivity',
+  gentle_inactivity: 'notifications.body.dailyLogReminder',
 };
 
 let syncing = false;
@@ -62,19 +62,8 @@ function periodLabel(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-function nextPreferredAt(preferredHour: number, from = new Date()): Date {
-  const at = new Date(from);
-  at.setSeconds(0, 0);
-  at.setMinutes(0);
-  at.setHours(preferredHour);
-  if (at.getTime() <= from.getTime() + 60_000) {
-    at.setDate(at.getDate() + 1);
-  }
-  return at;
-}
-
 export async function syncNotifications(opts?: {
-  /** When true, also fire a dense near-term burst so you can verify OS delivery. */
+  /** When true, also fire a short near-term burst so you can verify OS delivery. */
   burst?: boolean;
 }): Promise<void> {
   if (syncing) return;
@@ -96,12 +85,11 @@ export async function syncNotifications(opts?: {
     const preferences: NotificationPreference = {
       userId: ledger?.userId ?? 'guest',
       enabled: setup.notificationsEnabled,
-      // QA: allow every category so a rebuild can schedule a full set.
-      categories: ALL_NOTIFICATION_CATEGORIES,
+      categories: DEFAULT_NOTIFICATION_CATEGORIES,
       quietHoursStart: 22,
       quietHoursEnd: 7,
-      preferredHour: 9,
-      maxDaily: ALL_NOTIFICATION_CATEGORIES.length,
+      preferredHour: 19, // 7pm local
+      maxDaily: 1,
       maxWeeklyReviews: 1,
       previewMode: 'summary',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
@@ -121,8 +109,7 @@ export async function syncNotifications(opts?: {
       dataFreshness: 'fresh',
       locale,
       currency: ledger?.spaces.find((s) => s.id === spaceId)?.currency ?? setup.currency,
-      // Unlock sample-gated categories for local testing.
-      sampleSize: Math.max(ledger?.transactions.length ?? 0, 8),
+      sampleSize: ledger?.transactions.length ?? 0,
       memberSpaceIds,
     };
 
@@ -136,28 +123,27 @@ export async function syncNotifications(opts?: {
     if (!granted) return;
 
     const scheduler = await createExpoNotificationScheduler(locale);
-    const preferred = nextPreferredAt(preferences.preferredHour);
+    const now = new Date();
     const diff = await rebuildNotificationSchedule(scheduler, {
       preferences,
       snapshot,
-      // Force planner past quiet-hours gate during daytime testing; quiet hours
-      // still cancel when disabled via preferences.enabled = false.
-      localHour: 12,
+      // Prefer daytime check so quiet hours don't wipe the whole rebuild;
+      // fire times are stamped to 7pm / Sunday / month-end below.
+      localHour: Math.min(20, Math.max(8, now.getHours())),
     });
 
-    // Re-stamp schedule times onto preferred hour (+ small stagger) so DATE
-    // triggers are not already in the past.
     if (diff.schedule.length) {
       await scheduler.cancel(diff.schedule.map((s) => s.fingerprint));
-      const stamped = diff.schedule.map((item, i) => ({
-        ...item,
-        titleKey: TITLE_KEYS[item.type] ?? item.titleKey,
-        bodyPayload: {
-          ...item.bodyPayload,
-          summary: t(locale, BODY_KEYS[item.type] ?? 'notifications.body.generic'),
-        },
-        scheduledAt: new Date(preferred.getTime() + i * 60_000).toISOString(),
-      }));
+      const stamped = stampNotificationTimes(diff.schedule, preferences.preferredHour, now).map(
+        (item) => ({
+          ...item,
+          titleKey: TITLE_KEYS[item.type] ?? item.titleKey,
+          bodyPayload: {
+            ...item.bodyPayload,
+            summary: t(locale, BODY_KEYS[item.type] ?? 'notifications.body.generic'),
+          },
+        }),
+      );
       await scheduler.schedule(stamped);
     }
 
@@ -187,7 +173,7 @@ export function startNotificationLifecycle(): () => void {
 }
 
 export async function enableNotificationsAndBurst(): Promise<boolean> {
-  await loadSetupSession(); // ensure storage ready
+  await loadSetupSession();
   const granted = await requestNotificationPermission();
   if (!granted) return false;
   await syncNotifications({ burst: true });
