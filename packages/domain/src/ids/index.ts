@@ -32,6 +32,7 @@ export type IdPrefix =
   | 'cat'
   | 'mem'
   | 'inv'
+  | 'lnk'
   | 'att'
   | 'job'
   | 'aud'
