@@ -14,11 +14,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewMessageEvent, type WebViewNavigation } from 'react-native-webview';
+import { APP_WEB_URL } from '../lib/contact';
 import { colors, radius, space } from '../theme/tokens';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const DEFAULT_WEB = 'https://penny.phronexus-ai.com';
+const DEFAULT_WEB = APP_WEB_URL;
 /** In-app entry — skips marketing landing at `/`. */
 const APP_ENTRY_PATH = '/app/boot';
 

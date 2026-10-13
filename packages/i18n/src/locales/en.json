@@ -298,6 +298,12 @@
   "settings.currencySaved": "Currency updated",
   "settings.currencyFailed": "Could not update currency",
   "settings.account": "Account",
+  "settings.about": "About Penny",
+  "settings.support": "Support",
+  "settings.supportEmail": "Email support",
+  "settings.website": "Website",
+  "settings.openWebsite": "Open penny.phronexus-ai.com",
+  "settings.version": "App version {version}",
 
   "account.title": "Account",
   "account.status": "Status",

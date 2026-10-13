@@ -183,6 +183,12 @@
   "settings.theme.light": "فاتح",
   "settings.theme.dark": "داكن",
   "settings.theme.system": "النظام",
+  "settings.about": "حول Penny",
+  "settings.support": "الدعم",
+  "settings.supportEmail": "راسل الدعم",
+  "settings.website": "الموقع",
+  "settings.openWebsite": "افتح penny.phronexus-ai.com",
+  "settings.version": "إصدار التطبيق {version}",
 
   "billing.title": "الفوترة",
   "billing.free": "مجاني",

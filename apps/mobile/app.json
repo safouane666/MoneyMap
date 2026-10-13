@@ -28,7 +28,7 @@
         "backgroundColor": "#1EC569"
       },
       "package": "app.penny.mobile",
-      "versionCode": 1,
+      "versionCode": 2,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",

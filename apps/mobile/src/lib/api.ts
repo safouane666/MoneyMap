@@ -1,23 +1,23 @@
 import type { OfflineTransaction } from '../offline/queue';
+import { APP_API_URL } from './contact';
 import { getSessionCookie } from './session';
 
 /**
  * Base URL for the Penny API.
- * Release / EAS profiles must set EXPO_PUBLIC_API_URL to https://YOUR_DOMAIN/cm-api
+ * Release / EAS profiles set EXPO_PUBLIC_API_URL to https://penny.phronexus-ai.com/cm-api
  * (never localhost or LAN). Paths below are relative to that base (e.g. /auth/…, /spaces/…).
  */
 export function getApiUrl(): string {
   const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
 
-  // Dev-only fallback for Expo Go. Production builds must set EXPO_PUBLIC_API_URL.
+  // Dev-only fallback for Expo Go.
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
     return 'http://localhost:3011';
   }
 
-  throw new Error(
-    'EXPO_PUBLIC_API_URL is required for release builds (e.g. https://YOUR_DOMAIN/cm-api)',
-  );
+  // Release safety net if EAS env is missing.
+  return APP_API_URL;
 }
 
 export async function apiFetch(

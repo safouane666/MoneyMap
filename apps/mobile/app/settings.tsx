@@ -10,10 +10,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { CURRENCY_CATALOG, SHIPPED_LOCALES } from '@clear-money/domain';
 import { t } from '../src/lib/i18n';
 import { apiFetch } from '../src/lib/api';
+import { APP_WEB_URL, CONTACT_EMAIL } from '../src/lib/contact';
 import { loadLedger, updateSpace } from '../src/lib/ledger';
 import { clearSession } from '../src/lib/session';
 import {
@@ -23,6 +25,9 @@ import {
 } from '../src/lib/setup-session';
 import { useSetThemeMode, useThemeColors, useThemeMode } from '../src/theme/ThemeContext';
 import { radius, space } from '../src/theme/tokens';
+
+const APP_VERSION =
+  Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -193,6 +198,36 @@ export default function SettingsScreen() {
         </Pressable>
       </Card>
 
+      <Card title={t(locale, 'settings.about')}>
+        <Text style={{ color: colors.inkMuted, fontSize: 13 }}>
+          {t(locale, 'settings.version', { version: APP_VERSION })}
+        </Text>
+        <Pressable
+          onPress={() => {
+            void Linking.openURL(`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Penny support')}`);
+          }}
+          style={[styles.outline, { borderColor: colors.border }]}
+        >
+          <Text style={{ color: colors.inkSecondary, fontSize: 12, fontWeight: '600' }}>
+            {t(locale, 'settings.supportEmail')}
+          </Text>
+          <Text style={{ color: colors.brand, fontWeight: '700', marginTop: 2 }}>{CONTACT_EMAIL}</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            void Linking.openURL(APP_WEB_URL);
+          }}
+          style={[styles.outline, { borderColor: colors.border }]}
+        >
+          <Text style={{ color: colors.inkSecondary, fontSize: 12, fontWeight: '600' }}>
+            {t(locale, 'settings.website')}
+          </Text>
+          <Text style={{ color: colors.brand, fontWeight: '700', marginTop: 2 }}>
+            {t(locale, 'settings.openWebsite')}
+          </Text>
+        </Pressable>
+      </Card>
+
       {signedIn ? (
         <>
           <Card title={t(locale, 'settings.billing')}>
@@ -212,7 +247,7 @@ export default function SettingsScreen() {
                     const data = await res.json();
                     await Share.share({
                       message: JSON.stringify(data, null, 2),
-                      title: 'clear-money-export.json',
+                      title: 'penny-export.json',
                     });
                   } catch (err) {
                     Alert.alert(

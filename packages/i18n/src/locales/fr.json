@@ -183,6 +183,12 @@
   "settings.theme.light": "Clair",
   "settings.theme.dark": "Sombre",
   "settings.theme.system": "Système",
+  "settings.about": "À propos de Penny",
+  "settings.support": "Assistance",
+  "settings.supportEmail": "Contacter le support",
+  "settings.website": "Site web",
+  "settings.openWebsite": "Ouvrir penny.phronexus-ai.com",
+  "settings.version": "Version {version}",
 
   "billing.title": "Facturation",
   "billing.free": "Gratuit",

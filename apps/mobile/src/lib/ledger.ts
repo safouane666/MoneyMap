@@ -2,6 +2,7 @@ import type { Goal, LedgerTransaction, SpaceRole } from '@clear-money/domain';
 import { defaultCategoryRows } from '@clear-money/domain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
+import { APP_WEB_URL } from './contact';
 import { getPersonalSpaceId, setPersonalSpaceId } from './session';
 import { loadSetupSession } from './setup-session';
 
@@ -790,5 +791,5 @@ export function getWebOrigin(): string {
   const fromEnv = process.env.EXPO_PUBLIC_WEB_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   const api = process.env.EXPO_PUBLIC_API_URL?.trim() || '';
-  return api.replace(/\/cm-api\/?$/, '').replace(/\/$/, '') || 'https://penny.phronexus-ai.com';
+  return api.replace(/\/cm-api\/?$/, '').replace(/\/$/, '') || APP_WEB_URL;
 }
