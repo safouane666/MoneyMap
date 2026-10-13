@@ -64,7 +64,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 ```
 
 - Attach `moneymap-api` / `moneymap-web` to the edge Docker network.
-- Use nginx snippets in `deploy/nginx/moneymap.phronexus-ai.com*.conf` (HTTP bootstrap, then TLS).
+- Use nginx snippets in `deploy/nginx/penny.phronexus-ai.com*.conf` (HTTP bootstrap, then TLS). Keep `moneymap.phronexus-ai.com*.conf` as redirects to the new host.
 - Set `DATABASE_URL` host to **`moneymap-postgres`** (not `postgres`) so it does not collide with another DB on the shared network.
 
 ## 3. Migrate (and optional seed)
@@ -136,12 +136,56 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.
 - Privacy/terms routes are hosted at `/privacy` and `/terms`; replace placeholder copy with legal text before store listing.
 - Optional crash reporting: set `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` (web) and `EXPO_PUBLIC_SENTRY_DSN` (mobile), then install the Sentry SDK — stubs no-op when unset (see Phase 7 / P7.1).
 
-## Google OAuth (optional)
+## Domain rename (moneymap → penny)
 
-1. Create an OAuth client in Google Cloud Console (Web application).
-2. Authorized JavaScript origins: `https://your.domain.example` (and `http://localhost:8259` for local).
-3. Authorized redirect URIs (Better Auth callback):
-   - `https://your.domain.example/cm-api/auth/callback/google`
-   - `http://localhost:8259/cm-api/auth/callback/google` (local)
-4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `.env.production`. If unset, the Google button is hidden (`GET /public/auth-config`).
-5. After Google sign-in, the web ledger applies setup locale/currency via `/me/setup-complete` (same prefs as email sign-up).
+Not a rewrite of the stack — same containers, new public hostname.
+
+1. **DNS** — add `A` (and optional `AAAA`) for `penny.phronexus-ai.com` → VPS IP (same as moneymap). Wait for propagation.
+2. **TLS** — issue a cert for the new host (certbot / your usual flow), then install `deploy/nginx/penny.phronexus-ai.com.conf` into nexus-nginx and reload.
+3. **Env** — on the VPS set `WEB_URL` and `BETTER_AUTH_URL` to `https://penny.phronexus-ai.com`, then recreate `api` + `web` (no DB reset).
+4. **Google OAuth** — add the new origin + `https://penny.phronexus-ai.com/cm-api/auth/callback/google` in Google Cloud Console (keep the old ones until redirects settle).
+5. **Legacy** — keep `moneymap.phronexus-ai.com` nginx as a 301 to `penny.phronexus-ai.com` so old links and APKs still land somewhere useful.
+6. **Mobile** — rebuild EAS with `eas.json` pointing at `https://penny.phronexus-ai.com` (already set in repo).
+
+## Google OAuth (Penny — replace Peerbet / shared clients)
+
+User data lives in **Postgres** (`user`, `account`, spaces, transactions). Swapping the Google Cloud OAuth app does **not** wipe the DB.
+
+### Why existing users stay linked
+
+Better Auth stores Google’s stable user id (`sub`) in `account.account_id` with `provider_id = 'google'`. That `sub` is the same for a Google account across OAuth **client IDs**, so after you put a new Penny client on the VPS, the same people sign in to the **same** `user` rows (ledgers intact). Email/password users are unchanged.
+
+### Do / don’t
+
+| Do | Don’t |
+| --- | --- |
+| Create a dedicated GCP project / OAuth client branded **Penny** | Reset Postgres or recreate volumes |
+| Only replace `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in `.env.production` | Change `BETTER_AUTH_SECRET` unless you accept logging everyone out |
+| Keep `WEB_URL` / `BETTER_AUTH_URL` aligned with the live HTTPS host | Run `seed` against production |
+| Recreate **api** (and web) after env change | Delete rows in `user` / `account` |
+
+### Create the Penny OAuth client
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → new project **Penny** (or rename consent screen away from Peerbet).
+2. APIs & Services → **OAuth consent screen**: app name **Penny**, support email `pennyaitracker@gmail.com`.
+3. **Credentials** → Create OAuth client ID → type **Web application**.
+4. Authorized JavaScript origins:
+   - `https://penny.phronexus-ai.com`
+   - `https://moneymap.phronexus-ai.com` (optional during redirect period)
+   - `http://localhost:8259` (local)
+5. Authorized redirect URIs:
+   - `https://penny.phronexus-ai.com/cm-api/auth/callback/google`
+   - `https://moneymap.phronexus-ai.com/cm-api/auth/callback/google` (optional during cutover)
+   - `http://localhost:8259/cm-api/auth/callback/google`
+6. Put the new id/secret in VPS `.env.production` only (never commit). Then:
+
+```bash
+cd ~/Documents/moneyMap-workspace/MoneyMap
+# edit .env.production GOOGLE_* then:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.vps.yml \
+  --env-file .env.production up -d --force-recreate api web
+# Do NOT docker compose down -v / do NOT wipe postgres
+```
+
+7. Smoke: open sign-in → Google → confirm you land on the same spaces/transactions as before.
+8. If unset, the Google button stays hidden (`GET /public/auth-config`).

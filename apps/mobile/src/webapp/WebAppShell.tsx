@@ -18,7 +18,7 @@ import { colors, radius, space } from '../theme/tokens';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const DEFAULT_WEB = 'https://moneymap.phronexus-ai.com';
+const DEFAULT_WEB = 'https://penny.phronexus-ai.com';
 /** In-app entry — skips marketing landing at `/`. */
 const APP_ENTRY_PATH = '/app/boot';
 

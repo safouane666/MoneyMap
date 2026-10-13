@@ -10,8 +10,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
-        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
+        "EXPO_PUBLIC_API_URL": "https://penny.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://penny.phronexus-ai.com"
       }
     },
     "production": {
@@ -19,8 +19,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
-        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
+        "EXPO_PUBLIC_API_URL": "https://penny.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://penny.phronexus-ai.com"
       }
     },
     "ios": {
@@ -28,8 +28,8 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://moneymap.phronexus-ai.com/cm-api",
-        "EXPO_PUBLIC_WEB_URL": "https://moneymap.phronexus-ai.com"
+        "EXPO_PUBLIC_API_URL": "https://penny.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://penny.phronexus-ai.com"
       }
     }
   },

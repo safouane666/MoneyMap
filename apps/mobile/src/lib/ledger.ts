@@ -790,5 +790,5 @@ export function getWebOrigin(): string {
   const fromEnv = process.env.EXPO_PUBLIC_WEB_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   const api = process.env.EXPO_PUBLIC_API_URL?.trim() || '';
-  return api.replace(/\/cm-api\/?$/, '').replace(/\/$/, '') || 'https://moneymap.phronexus-ai.com';
+  return api.replace(/\/cm-api\/?$/, '').replace(/\/$/, '') || 'https://penny.phronexus-ai.com';
 }

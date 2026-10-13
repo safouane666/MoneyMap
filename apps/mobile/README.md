@@ -7,8 +7,8 @@ Native Expo Router app (auth, spaces, Penny, sync) pointed at the production API
 ```powershell
 cd D:\Work\MoneyMap\apps\mobile
 # Optional .env:
-# EXPO_PUBLIC_API_URL=https://moneymap.phronexus-ai.com/cm-api
-# EXPO_PUBLIC_WEB_URL=https://moneymap.phronexus-ai.com
+# EXPO_PUBLIC_API_URL=https://penny.phronexus-ai.com/cm-api
+# EXPO_PUBLIC_WEB_URL=https://penny.phronexus-ai.com
 pnpm exec expo start --clear --lan
 ```
 
@@ -33,7 +33,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compos
 Smoke:
 
 ```bash
-curl -sI "https://moneymap.phronexus-ai.com/cm-api/public/mobile-google-oauth?to=clearmoney://auth/callback"
+curl -sI "https://penny.phronexus-ai.com/cm-api/public/mobile-google-oauth?to=penny://auth/callback"
 # expect 302 Location: https://accounts.google.com/...
 ```
 
