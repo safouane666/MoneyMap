@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useEffect, useRef, useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
@@ -10,19 +10,36 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useI18n } from '@/lib/i18n';
 import { ApiError, apiFetch, startGoogleSignIn } from '@/lib/api';
+import { continueAfterAuth } from '@/lib/auth-navigation';
 import { clearLocalSessionCaches } from '@/lib/session-cache';
 
 function SignInForm() {
   const { t } = useI18n();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/app/home';
   const autoGoogle = searchParams.get('google') === '1';
   const startedGoogle = useRef(false);
+  const checkedSession = useRef(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Already signed in (e.g. soft-nav loop) → hard-enter the app so Ledger remounts.
+  useEffect(() => {
+    if (checkedSession.current) return;
+    checkedSession.current = true;
+    void (async () => {
+      try {
+        const me = await apiFetch<{ id?: string }>('/me', { timeoutMs: 8_000 });
+        if (!me.offline && me.data?.id) {
+          continueAfterAuth(next);
+        }
+      } catch {
+        /* stay on sign-in */
+      }
+    })();
+  }, [next]);
 
   useEffect(() => {
     if (!autoGoogle || startedGoogle.current) return;
@@ -51,8 +68,8 @@ function SignInForm() {
         setError(t('auth.serverUnreachable'));
         return;
       }
-      router.push(next.startsWith('/') ? next : '/app/home');
-      router.refresh();
+      continueAfterAuth(next);
+      return;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('auth.signInFailed'));
     } finally {

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import {
   clearGuestSnapshot,
   migrateGuestLedgerToSpace,
@@ -75,15 +75,25 @@ export default function AppBootPage() {
 
     let cancelled = false;
     void (async () => {
-      const me = await apiFetch<{ id?: string }>('/me', { timeoutMs: 12_000 });
-      if (cancelled) return;
-
-      if (!me.offline && me.data?.id) {
-        await maybeMigrateGuestAfterAuth();
+      try {
+        const me = await apiFetch<{ id?: string }>('/me', { timeoutMs: 12_000 });
         if (cancelled) return;
-        router.replace('/app/home');
-        return;
+
+        if (!me.offline && me.data?.id) {
+          await maybeMigrateGuestAfterAuth();
+          if (cancelled) return;
+          router.replace('/app/home');
+          return;
+        }
+      } catch (err) {
+        // 401 = no session; anything else falls through to setup / sign-in.
+        if (cancelled) return;
+        if (!(err instanceof ApiError && err.status === 401)) {
+          // Network blip: still offer sign-in rather than hanging on a blank boot screen.
+        }
       }
+
+      if (cancelled) return;
 
       if (!setupComplete()) {
         router.replace(getSetupResumePath());

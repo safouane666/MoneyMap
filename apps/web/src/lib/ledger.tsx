@@ -556,6 +556,23 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     };
   }, [applyDemo, refreshFromApi]);
 
+  // Recover after cookie-based auth when the provider did not remount (soft nav / bfcache).
+  useEffect(() => {
+    const tryResumeSession = () => {
+      if (!offlineRef.current) return;
+      void refreshFromApi();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tryResumeSession();
+    };
+    window.addEventListener('focus', tryResumeSession);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', tryResumeSession);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refreshFromApi]);
+
   const setSpace = useCallback(
     (spaceId: string) => {
       if (offlineRef.current) {

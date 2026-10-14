@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';
 import { AuthShell } from '@/components/AuthShell';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
@@ -10,12 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useI18n } from '@/lib/i18n';
 import { ApiError, apiFetch } from '@/lib/api';
+import { continueAfterAuth } from '@/lib/auth-navigation';
 import { loadSetupSession } from '@/lib/setup-session';
 import { migrateGuestLedgerToSpace, snapshotGuestLedger } from '@/lib/guest-migrate';
 
 function SignUpForm() {
   const { t } = useI18n();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/app/home';
   const [name, setName] = useState('');
@@ -68,8 +68,8 @@ function SignUpForm() {
         await migrateGuestLedgerToSpace(spaceId, guest);
       }
 
-      router.push(next.startsWith('/') ? next : '/app/home');
-      router.refresh();
+      continueAfterAuth(next);
+      return;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('auth.signUpFailed'));
     } finally {
