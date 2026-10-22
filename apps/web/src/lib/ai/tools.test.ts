@@ -94,6 +94,21 @@ describe('get_report structured series', () => {
     expect(out.ok && out.result.seriesAvailable).toBe(false);
     expect(actions.some((a) => a.type === 'show_chart')).toBe(false);
   });
+
+  it('builds a human report card without transaction ids', async () => {
+    const actions: AiAction[] = [];
+    const out = await runAiTool('get_report', { period: 'thisMonth' }, reportContext(), actions);
+    expect(out.ok).toBe(true);
+    const report = actions.find((a) => a.type === 'report');
+    expect(report && report.type === 'report' ? report.title : null).toBe('This month');
+    const body = report && report.type === 'report' ? report.body : '';
+    expect(body).not.toMatch(/txn_/i);
+    expect(body).toMatch(/Biggest spend:/);
+    expect(body).toMatch(/Latest:/);
+    if (out.ok) {
+      expect(String(out.result.summary)).not.toMatch(/txn_/i);
+    }
+  });
 });
 
 describe('buildSystemPrompt', () => {
@@ -103,5 +118,7 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('TND');
     expect(prompt).toContain('get_report');
     expect(prompt).toMatch(/Never bulk-delete/);
+    expect(prompt).toMatch(/Never use markdown/);
+    expect(prompt).toMatch(/txn_/);
   });
 });

@@ -56,6 +56,7 @@ import {
   parseMoneyUtterance,
   type MoneyDraft,
 } from '@/lib/ai/ledger-intent';
+import { toPennyPlainText } from '@/lib/ai/plain-text';
 import { AI_CONTEXT_TXN_LIMIT } from '@/lib/ai/types';
 import type {
   AiAction,
@@ -1321,6 +1322,14 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
           : `I haven't written anything to your ledger yet. Try again with an amount and category (e.g. "I spent 12.50 on coffee").`;
       }
 
+      const plainReply = toPennyPlainText(replyText);
+      const plainReport = result.reports[0]
+        ? {
+            ...result.reports[0],
+            body: toPennyPlainText(result.reports[0].body),
+          }
+        : undefined;
+
       if (result.pending) {
         setPending(result.pending);
         setChips(suggestions);
@@ -1329,8 +1338,8 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
           {
             id: `a_${Date.now()}`,
             role: 'assistant',
-            content: replyText,
-            report: result.reports[0],
+            content: plainReply,
+            report: plainReport,
             chart: result.charts[0],
             suggestions,
           },
@@ -1343,8 +1352,8 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
           {
             id: `a_${Date.now()}`,
             role: 'assistant',
-            content: replyText,
-            report: result.reports[0],
+            content: plainReply,
+            report: plainReport,
             chart: result.charts[0],
           },
         ]);
@@ -1538,13 +1547,17 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
                     : 'border border-border bg-canvas text-ink',
                 )}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                <p className="whitespace-pre-wrap">
+                  {msg.role === 'assistant' ? toPennyPlainText(msg.content) : msg.content}
+                </p>
                 {msg.report ? (
                   <div className="mt-3 rounded-[var(--cm-radius-control)] border border-border bg-surface p-3 text-ink">
                     <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
                       {msg.report.title}
                     </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{msg.report.body}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">
+                      {toPennyPlainText(msg.report.body)}
+                    </p>
                   </div>
                 ) : null}
                 {msg.chart ? (

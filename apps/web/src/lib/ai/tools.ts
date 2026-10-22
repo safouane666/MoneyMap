@@ -928,6 +928,59 @@ const PERIOD_LABEL: Record<ReportPeriod, string> = {
   allTime: 'all time',
 };
 
+const PERIOD_TITLE: Record<ReportPeriod, string> = {
+  thisWeek: 'This week',
+  thisMonth: 'This month',
+  lastMonth: 'Last month',
+  last3Months: 'Last 3 months',
+  thisYear: 'This year',
+  allTime: 'All time',
+};
+
+/** Human-facing recent line — never include transaction ids. */
+function formatRecentEntryHuman(
+  r: { type: string; amountMinor: number; description: string | null; category: string | null },
+  currency: string,
+): string {
+  const label =
+    (r.description && r.description.trim()) ||
+    (r.category && r.category.trim()) ||
+    (r.type === 'income' ? 'Income' : 'Expense');
+  const direction = r.type === 'income' ? 'in' : 'out';
+  return `${label} · ${formatMinor(r.amountMinor, currency)} ${direction}`;
+}
+
+function buildHumanReportBody(input: {
+  spaceName: string;
+  currency: string;
+  periodLabel?: string;
+  totals: { incomeMinor: number; expenseMinor: number; netMinor: number };
+  topCategory?: { name: string; amountMinor: number; share: number } | null;
+  recent: Array<{
+    type: string;
+    amountMinor: number;
+    description: string | null;
+    category: string | null;
+  }>;
+}): string {
+  const { spaceName, currency, periodLabel, totals, topCategory, recent } = input;
+  const lines = [
+    periodLabel ? `${spaceName} · ${periodLabel}` : spaceName,
+    `In ${formatMinor(totals.incomeMinor, currency)} · out ${formatMinor(totals.expenseMinor, currency)} · net ${formatMinor(totals.netMinor, currency)}`,
+  ];
+  if (topCategory) {
+    lines.push(
+      `Biggest spend: ${topCategory.name} · ${formatMinor(topCategory.amountMinor, currency)} (${Math.round(topCategory.share * 100)}%)`,
+    );
+  }
+  if (recent.length) {
+    lines.push(`Latest: ${recent.slice(0, 5).map((r) => formatRecentEntryHuman(r, currency)).join('; ')}`);
+  } else {
+    lines.push('Latest: nothing logged yet');
+  }
+  return lines.join('\n');
+}
+
 function uiLocale(context: AiLedgerContext): 'en' | 'fr' | 'ar' {
   const code = (context.locale || 'en').toLowerCase().slice(0, 2);
   return code === 'fr' || code === 'ar' ? code : 'en';
@@ -1010,34 +1063,22 @@ function runReport(
     : null;
   const totals = snap?.totals ?? context.totals;
 
-  const lines = [
-    `Space: ${context.spaceName} (${currency})${snap ? ` · ${PERIOD_LABEL[period]}` : ''}`,
-    `Income: ${formatMinor(totals.incomeMinor, currency)}`,
-    `Expenses: ${formatMinor(totals.expenseMinor, currency)}`,
-    `Net: ${formatMinor(totals.netMinor, currency)}`,
-  ];
-  if (snap?.topCategory) {
-    lines.push(
-      `Top category: ${snap.topCategory.name} ${formatMinor(snap.topCategory.amountMinor, currency)} (${Math.round(snap.topCategory.share * 100)}%)`,
-    );
-  }
-  lines.push(
-    context.recent.length
-      ? `Recent: ${context.recent
-          .slice(0, 5)
-          .map(
-            (r) =>
-              `${r.id} ${r.type} ${formatMinor(r.amountMinor, currency)}${r.category ? ` · ${r.category}` : ''}${r.description ? ` (${r.description})` : ''}`,
-          )
-          .join('; ')}`
-      : 'Recent: none yet',
-  );
-  const body = lines.join('\n');
+  const body = buildHumanReportBody({
+    spaceName: context.spaceName,
+    currency,
+    periodLabel: snap ? PERIOD_LABEL[period] : undefined,
+    totals,
+    topCategory: snap?.topCategory ?? null,
+    recent: context.recent,
+  });
 
   actions.push({
     type: 'report',
     // Long focus strings are raw user text from the deterministic fallback — keep the title tidy.
-    title: focus === 'overview' || focus.length > 24 ? 'Space summary' : `Focus: ${focus}`,
+    title:
+      focus === 'overview' || focus.length > 24
+        ? PERIOD_TITLE[period]
+        : focus.slice(0, 48),
     body,
   });
 
@@ -1118,6 +1159,7 @@ function runReport(
       peakHours,
       chartShown: chart && hasData ? chart : null,
       summary: body,
+      recent: context.recent.slice(0, 5).map((r) => formatRecentEntryHuman(r, currency)),
     },
   };
 }
@@ -1776,7 +1818,8 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
   return [
     // Persona
     'You are Penny — calm AI money companion inside the MoneyMap app. Speak in first person as Penny only.',
-    'Tone: warm, practical, lightly funny — at most one short quip. 1–3 short sentences, plain text (no tables, no headings). Not clingy or overly affectionate.',
+    'Tone: warm, practical, lightly funny — at most one short quip. Write like a short text to a friend: plain words only.',
+    'FORMATTING: Never use markdown (no **, __, # headings, - bullet lists, numbered dumps, or code). Never show database ids (txn_…, goal_…, cat_…). Never paste or restate the whole report card — the app already shows it. One insight + one soft question is enough (1–3 short sentences).',
     'Greetings or small talk: answer in one line and offer to log spend or show a report. No tools.',
     // Locale
     `LANGUAGE: Reply entirely in ${replyLang} (app locale "${locale}"), including category names and chart/report wording. Only switch if the user clearly writes in another language. Tool arguments stay in the user's own wording.`,
@@ -1793,7 +1836,7 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     // Safety
     'If the message is gibberish, a lone word, or unclear, ask one short clarifying question and call no tools. Never call delete/hide/update tools on unclear input or on short replies like "yes", "ok", "both", "any".',
     'Delete/hide ONLY when the user clearly says delete/remove/undo/hide AND names what (the last entry, a specific category, goal, or recurring item). Never bulk-delete: if asked to remove several or "all/most" items, list the candidates and ask which one first, then delete one at a time.',
-    'Prefer ids from find_entries/list_* over guessing. If a tool returns needDisambiguation or an error, tell the user and ask — never claim success.',
+    'Prefer ids from find_entries/list_* for tool calls only — never read ids aloud to the user. If a tool returns needDisambiguation or an error, tell the user in plain language and ask — never claim success.',
     'No investment, tax, or lending advice.',
     `Active space: ${context.spaceName}. Currency: ${context.currency}.`,
     `Categories: ${catNames || 'none yet'}.`,

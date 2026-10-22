@@ -4,6 +4,7 @@ import {
   looksLikeDeleteIntent,
   looksLikeLedgerIntent,
 } from './ledger-intent';
+import { toPennyPlainText } from './plain-text';
 import type { AiAction, AiChatMessage, AiChatResponse, AiLedgerContext } from './types';
 
 interface OpenAiMessage {
@@ -423,7 +424,7 @@ export async function runAiChat(input: {
     }
 
     return {
-      reply: reply || fallbackReply(actions, input.context.currency, locale),
+      reply: toPennyPlainText(reply || fallbackReply(actions, input.context.currency, locale)),
       actions,
       suggestions: askCategory?.suggestions,
     };
@@ -437,7 +438,7 @@ export async function runAiChat(input: {
   );
 
   return {
-    reply: fallbackReply(safeActions, input.context.currency, locale),
+    reply: toPennyPlainText(fallbackReply(safeActions, input.context.currency, locale)),
     actions: safeActions,
     suggestions: askCategory?.suggestions,
   };
