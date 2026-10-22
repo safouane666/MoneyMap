@@ -12,18 +12,20 @@ import { t } from '../lib/i18n';
 import { useThemeColors } from '../theme/ThemeContext';
 
 const ACTION_WIDTH = 88;
-const COMMIT_RATIO = 0.55;
 
-/** PanResponder swipe (no reanimated) — safe in Expo Go New Arch. */
+/**
+ * Swipe reveals action buttons; the user must tap a button to trigger.
+ * Swipe back (or tap elsewhere) snaps the row closed.
+ */
 export function SwipeableActivityRow({
   children,
-  onHide,
-  onDelete,
+  onEdit,
+  onArchive,
   locale = 'en',
 }: {
   children: ReactNode;
-  onHide: () => void;
-  onDelete: () => void;
+  onEdit: () => void;
+  onArchive: () => void;
   locale?: string;
 }) {
   const colors = useThemeColors();
@@ -32,24 +34,18 @@ export function SwipeableActivityRow({
 
   const clamp = (value: number) => Math.max(-ACTION_WIDTH, Math.min(ACTION_WIDTH, value));
 
-  const commit = (next: number) => {
-    if (next <= -ACTION_WIDTH * COMMIT_RATIO) {
-      Animated.timing(offset, { toValue: 0, duration: 160, useNativeDriver: true }).start();
-      onDelete();
-      return;
-    }
-    if (next >= ACTION_WIDTH * COMMIT_RATIO) {
-      Animated.timing(offset, { toValue: 0, duration: 160, useNativeDriver: true }).start();
-      onHide();
-      return;
-    }
-    const snap =
+  const snap = (next: number) => {
+    const target =
       next < -ACTION_WIDTH * 0.35
         ? -ACTION_WIDTH
         : next > ACTION_WIDTH * 0.35
           ? ACTION_WIDTH
           : 0;
-    Animated.timing(offset, { toValue: snap, duration: 160, useNativeDriver: true }).start();
+    Animated.timing(offset, { toValue: target, duration: 160, useNativeDriver: true }).start();
+  };
+
+  const close = () => {
+    Animated.timing(offset, { toValue: 0, duration: 120, useNativeDriver: true }).start();
   };
 
   const pan = useRef(
@@ -65,10 +61,10 @@ export function SwipeableActivityRow({
         offset.setValue(clamp(start.current + g.dx));
       },
       onPanResponderRelease: (_, g) => {
-        commit(clamp(start.current + g.dx));
+        snap(clamp(start.current + g.dx));
       },
       onPanResponderTerminate: (_, g) => {
-        commit(clamp(start.current + g.dx));
+        snap(clamp(start.current + g.dx));
       },
     }),
   ).current;
@@ -78,28 +74,28 @@ export function SwipeableActivityRow({
       <View style={styles.actions} pointerEvents="box-none">
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t(locale, 'app.hide')}
+          accessibilityLabel={t(locale, 'app.edit')}
           onPress={() => {
-            Animated.timing(offset, { toValue: 0, duration: 120, useNativeDriver: true }).start();
-            onHide();
+            close();
+            onEdit();
           }}
-          style={[styles.action, { backgroundColor: colors.inkSecondary }]}
+          style={[styles.action, { backgroundColor: colors.info }]}
         >
-          <Ionicons name="eye-off-outline" size={16} color="#fff" />
-          <Text style={styles.actionLabel}>{t(locale, 'app.hide')}</Text>
+          <Ionicons name="create-outline" size={16} color="#fff" />
+          <Text style={styles.actionLabel}>{t(locale, 'app.edit')}</Text>
         </Pressable>
         <View style={{ flex: 1 }} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t(locale, 'app.delete')}
+          accessibilityLabel={t(locale, 'app.archive')}
           onPress={() => {
-            Animated.timing(offset, { toValue: 0, duration: 120, useNativeDriver: true }).start();
-            onDelete();
+            close();
+            onArchive();
           }}
-          style={[styles.action, { backgroundColor: colors.expense }]}
+          style={[styles.action, { backgroundColor: colors.inkSecondary }]}
         >
-          <Ionicons name="trash-outline" size={16} color="#fff" />
-          <Text style={styles.actionLabel}>{t(locale, 'app.delete')}</Text>
+          <Ionicons name="archive-outline" size={16} color="#fff" />
+          <Text style={styles.actionLabel}>{t(locale, 'app.archive')}</Text>
         </Pressable>
       </View>
       <Animated.View

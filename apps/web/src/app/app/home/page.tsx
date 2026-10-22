@@ -1,14 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import {
   computeSafeToSpend,
+  currencyDecimalPlaces,
   formatDate,
   formatMinorUnits,
   goalRemaining,
   monthlyTargetMinor,
+  parseDisplayAmount,
+  type CurrencyCode,
+  type LedgerTransaction,
 } from '@clear-money/domain';
 import { SummaryCard } from '@/components/SummaryCard';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
@@ -17,6 +21,15 @@ import { MonthlyShareCard } from '@/components/MonthlyShareCard';
 import { PeriodSelector, type Period } from '@/components/PeriodSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useI18n } from '@/lib/i18n';
 import { useLedger } from '@/lib/ledger';
 import { useToast } from '@/components/Toast';
@@ -30,7 +43,6 @@ import {
   sumActiveRecurringExpensesMinor,
 } from '@/lib/demo-state';
 import { RecurringHomeSection } from '@/components/RecurringHomeSection';
-import type { LedgerTransaction } from '@clear-money/domain';
 
 function inPeriod(iso: string, period: Period): boolean {
   const d = new Date(iso);
@@ -50,10 +62,13 @@ function inPeriod(iso: string, period: Period): boolean {
 
 export default function HomePage() {
   const { t, locale } = useI18n();
-  const { state, hideTransaction, unhideTransaction, undoTransaction, restoreTransaction } =
-    useLedger();
+  const { state, hideTransaction, unhideTransaction, updateTransaction } = useLedger();
   const { showToast } = useToast();
   const [period, setPeriod] = useState<Period>('thisMonth');
+  const [editing, setEditing] = useState<LedgerTransaction | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
   const space = getActiveSpace(state);
 
   const filtered = useMemo(
@@ -114,22 +129,44 @@ export default function HomePage() {
         ? t('app.lastMonth')
         : t('app.thisMonth');
 
-  const handleHide = (id: string) => {
+  const handleArchive = (id: string) => {
     hideTransaction(id);
     showToast({
-      message: t('app.hidden'),
+      message: t('app.entryArchived'),
       actionLabel: t('app.undo'),
       onAction: () => unhideTransaction(id),
     });
   };
 
-  const handleDelete = (txn: LedgerTransaction) => {
-    undoTransaction(txn.id);
-    showToast({
-      message: t('app.deleted'),
-      actionLabel: t('app.undo'),
-      onAction: () => restoreTransaction(txn),
-    });
+  const openEdit = (txn: LedgerTransaction) => {
+    const decimals = currencyDecimalPlaces(space.currency as CurrencyCode);
+    setEditAmount(String(txn.amountMinor / 10 ** decimals));
+    setEditNote(txn.description ?? '');
+    setEditing(txn);
+  };
+
+  const onSaveEdit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setEditBusy(true);
+    try {
+      const amountMinor = Math.abs(
+        parseDisplayAmount(editAmount || '0', space.currency as CurrencyCode),
+      );
+      if (amountMinor <= 0) throw new Error(t('txn.enterAmount'));
+      updateTransaction(editing.id, {
+        amountMinor,
+        description: editNote.trim() || null,
+      });
+      setEditing(null);
+      showToast({ message: t('app.saved') });
+    } catch (err) {
+      showToast({
+        message: err instanceof Error ? err.message : t('errors.generic'),
+      });
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   return (
@@ -139,7 +176,7 @@ export default function HomePage() {
           <p className="text-sm text-ink-muted">{space.name}</p>
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{t('nav.home')}</h1>
         </div>
-        <PeriodSelector value={period} onChange={setPeriod} />
+        <PeriodSelector value={period} onChange={(v) => setPeriod(v as Period)} />
       </div>
 
       <div className="space-y-4">
@@ -250,8 +287,8 @@ export default function HomePage() {
                   style={{ animationDelay: `${80 + index * 40}ms` }}
                 >
                   <SwipeableActivityRow
-                    onHide={() => handleHide(txn.id)}
-                    onDelete={() => handleDelete(txn)}
+                    onEdit={() => openEdit(txn)}
+                    onArchive={() => handleArchive(txn.id)}
                   >
                     <div className="flex items-center justify-between gap-3 bg-surface px-4 py-3">
                       <div className="min-w-0">
@@ -274,7 +311,7 @@ export default function HomePage() {
                           }`}
                         >
                           {txn.type === 'expense' ? '−' : '+'}
-                          {formatMinorUnits(txn.amountMinor, txn.currency, locale)}
+                          {formatMinorUnits(txn.amountMinor, space.currency, locale)}
                         </p>
                         <Badge variant={txn.type === 'income' ? 'income' : 'expense'}>
                           {txn.type === 'income' ? t('txn.receive') : t('txn.spend')}
@@ -288,6 +325,38 @@ export default function HomePage() {
           </ul>
         )}
       </section>
+
+      <Dialog open={Boolean(editing)} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('app.editEntry')}</DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={onSaveEdit}>
+            <div className="space-y-2">
+              <Label htmlFor="home-edit-amount">{t('txn.amount')}</Label>
+              <Input
+                id="home-edit-amount"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="home-edit-note">{t('txn.note')}</Label>
+              <Input
+                id="home-edit-note"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={editBusy || !editAmount.trim()}>
+                {t('app.saveChanges')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {goal ? (
         <p className="sr-only">

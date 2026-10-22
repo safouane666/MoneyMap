@@ -9,7 +9,10 @@ describe('t', () => {
   it('resolves recurring copy like web home', () => {
     expect(t('en', 'recurring.salaryTitle')).toBe('Salary & income');
     expect(t('en', 'recurring.addSalary')).toBe('Add income');
-    expect(t('en', 'recurring.subscriptionsEmpty')).toBe('No subscriptions yet.');
+    expect(t('en', 'recurring.subscriptionsTitle')).toBe('Subscriptions & loans');
+    expect(t('en', 'recurring.subscriptionsEmpty')).toBe('No subscriptions or loans yet.');
+    expect(t('en', 'recurring.forever')).toBe('Forever');
+    expect(t('fr', 'recurring.months')).toBe('Mois');
   });
 
   it('resolves BCP 47 region tags to language bundle', () => {

@@ -2,15 +2,16 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { t } from '../../src/lib/i18n';
 import { AuroraBackdrop } from '../../src/components/AuroraBackdrop';
 import { GoogleSignInButton } from '../../src/components/GoogleSignInButton';
 import { PennyAvatar } from '../../src/components/penny/PennyFigure';
 import { Body, PrimaryButton, SecondaryButton, Title } from '../../src/components/ui';
 import { AuthError, signUpWithEmail } from '../../src/lib/auth';
-import { colors, radius, space, touchTarget } from '../../src/theme/tokens';
+import { useSetupLocale } from '../../src/lib/setup-locale';
+import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function SignUpScreen() {
+  const { t } = useSetupLocale();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +26,7 @@ export default function SignUpScreen() {
       await signUpWithEmail({ name, email, password });
       router.replace('/(tabs)/home');
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Sign up failed');
+      setError(err instanceof AuthError ? err.message : t('auth.signUpFailed'));
     } finally {
       setLoading(false);
     }
@@ -39,19 +40,19 @@ export default function SignUpScreen() {
         <PennyAvatar pose="cheer" size="lg" />
       </View>
       <View style={styles.card}>
-        <Title>{t('en', 'auth.signUpTitle')}</Title>
-        <Body>{t('en', 'brand.tagline')}</Body>
+        <Title>{t('auth.signUpTitle')}</Title>
+        <Body>{t('brand.tagline')}</Body>
         <GoogleSignInButton
           migrateGuest
-          label="Continue with Google"
+          label={t('auth.google')}
           onSuccess={() => router.replace('/(tabs)/home')}
           onError={setError}
         />
-        <Text style={styles.or}>or email</Text>
+        <Text style={styles.or}>{t('auth.orEmail')}</Text>
         <View style={styles.form}>
           <TextInput
-            accessibilityLabel={t('en', 'auth.name')}
-            placeholder={t('en', 'auth.name')}
+            accessibilityLabel={t('auth.name')}
+            placeholder={t('auth.name')}
             placeholderTextColor={colors.inkMuted}
             value={name}
             onChangeText={setName}
@@ -59,11 +60,11 @@ export default function SignUpScreen() {
             style={styles.input}
           />
           <TextInput
-            accessibilityLabel={t('en', 'auth.email')}
+            accessibilityLabel={t('auth.email')}
             autoCapitalize="none"
             keyboardType="email-address"
             autoComplete="email"
-            placeholder={t('en', 'auth.email')}
+            placeholder={t('auth.email')}
             placeholderTextColor={colors.inkMuted}
             value={email}
             onChangeText={setEmail}
@@ -71,10 +72,10 @@ export default function SignUpScreen() {
             style={styles.input}
           />
           <TextInput
-            accessibilityLabel={t('en', 'auth.password')}
+            accessibilityLabel={t('auth.password')}
             secureTextEntry
             autoComplete="new-password"
-            placeholder={t('en', 'auth.password')}
+            placeholder={t('auth.password')}
             placeholderTextColor={colors.inkMuted}
             value={password}
             onChangeText={setPassword}
@@ -84,12 +85,12 @@ export default function SignUpScreen() {
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <PrimaryButton
-          label={loading ? 'Creating…' : t('en', 'auth.submitSignUp')}
+          label={loading ? t('auth.creating') : t('auth.submitSignUp')}
           onPress={() => void onSubmit()}
         />
         <View style={{ height: space[3] }} />
         <SecondaryButton
-          label={t('en', 'auth.hasAccount')}
+          label={t('auth.hasAccount')}
           onPress={() => router.push('/auth/sign-in')}
         />
       </View>
@@ -120,21 +121,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: space[5],
   },
-  form: { gap: space[3], marginBottom: space[4] },
-  input: {
-    minHeight: touchTarget,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.control,
-    backgroundColor: colors.canvas,
-    paddingHorizontal: space[4],
-    color: colors.ink,
-  },
-  error: { color: colors.expense, marginBottom: space[3] },
   or: {
     textAlign: 'center',
     color: colors.inkMuted,
-    fontSize: 12,
-    marginBottom: space[3],
+    fontSize: 13,
+    marginVertical: space[3],
   },
+  form: { gap: 0 },
+  input: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.control,
+    paddingHorizontal: space[4],
+    marginBottom: space[3],
+    color: colors.ink,
+    backgroundColor: colors.canvas,
+  },
+  error: { color: colors.expense, marginBottom: space[3], fontSize: 13 },
 });

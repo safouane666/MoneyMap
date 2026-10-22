@@ -19,41 +19,41 @@ export const SETUP_STEPS: SetupStepId[] = [
 
 export const SETUP_STEP_META: Record<
   SetupStepId,
-  { pose: SetupPose; bubble: string; route: string; step: number }
+  { pose: SetupPose; bubbleKey: string; route: string; step: number }
 > = {
   language: {
     pose: 'wave',
-    bubble: 'Hi! First things first — which language feels natural?',
+    bubbleKey: 'setup.bubbles.language',
     route: '/setup/language',
     step: 1,
   },
   meet: {
     pose: 'cheer',
-    bubble: "Nice to meet you. I'm Penny. I'll stick with you through setup.",
+    bubbleKey: 'setup.bubbles.meet',
     route: '/setup/meet',
     step: 2,
   },
   features: {
     pose: 'think',
-    bubble: 'Quick tour: ledger, spaces, and a helpful AI sidekick.',
+    bubbleKey: 'setup.bubbles.features',
     route: '/setup/features',
     step: 3,
   },
   currency: {
     pose: 'think',
-    bubble: 'What should we call “home base” for your money?',
+    bubbleKey: 'setup.bubbles.currency',
     route: '/setup/currency',
     step: 4,
   },
   notifications: {
     pose: 'idle',
-    bubble: 'Want a soft nudge now and then? Totally optional.',
+    bubbleKey: 'setup.bubbles.notifications',
     route: '/setup/notifications',
     step: 5,
   },
   ready: {
     pose: 'cheer',
-    bubble: "Boom — you're ready. I'll cheer from the sidelines.",
+    bubbleKey: 'setup.bubbles.ready',
     route: '/setup/ready',
     step: 6,
   },
@@ -63,6 +63,12 @@ export function nextSetupRoute(current: SetupStepId): string {
   const idx = SETUP_STEPS.indexOf(current);
   if (idx < 0 || idx >= SETUP_STEPS.length - 1) return SETUP_STEP_META.ready.route;
   return SETUP_STEP_META[SETUP_STEPS[idx + 1]!].route;
+}
+
+export function prevSetupRoute(current: SetupStepId): string | null {
+  const idx = SETUP_STEPS.indexOf(current);
+  if (idx <= 0) return null;
+  return SETUP_STEP_META[SETUP_STEPS[idx - 1]!].route;
 }
 
 export function firstIncompleteRoute(completedSteps: string[]): string {

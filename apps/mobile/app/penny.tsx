@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,9 +11,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { computePeriodTotals } from '@clear-money/domain';
+import { computePeriodTotals, type HourBucket } from '@clear-money/domain';
+import { KeyboardAvoidingWrap } from '../src/components/KeyboardAvoidingWrap';
 import { PennyAvatar } from '../src/components/penny/PennyFigure';
-import { applyPennyActions, type PennyAction } from '../src/lib/apply-penny-actions';
+import { HourBars, LabeledBars } from '../src/components/ReportMiniCharts';
+import {
+  applyPennyActions,
+  type PennyAction,
+  type PennyChart,
+} from '../src/lib/apply-penny-actions';
 import { apiFetch } from '../src/lib/api';
 import { t } from '../src/lib/i18n';
 import {
@@ -29,16 +33,63 @@ import { loadSetupSession } from '../src/lib/setup-session';
 import { useThemeColors } from '../src/theme/ThemeContext';
 import { radius, space } from '../src/theme/tokens';
 
-type ChatMsg = { id: string; role: 'user' | 'assistant'; content: string };
+type ChatMsg = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  chart?: PennyChart;
+};
 
-const STARTERS = [
-  'I spent 12.50 on coffee',
-  'Create a goal for a laptop — 1200 over 6 months',
-  'Add my salary 3000 on the 1st',
-  'Delete the last expense',
-  'Rename Coffee to Café',
-  'What did I spend this month?',
-];
+/** Max compact income/expense rows sent so get_report can chart (matches web). */
+const CONTEXT_TXN_LIMIT = 400;
+
+function PennyChartCard({ chart, locale }: { chart: PennyChart; locale: string }) {
+  const colors = useThemeColors();
+  const currency = chart.currency ?? 'USD';
+  const title =
+    chart.title ??
+    t(
+      locale,
+      chart.chart === 'category'
+        ? 'reports.categories'
+        : chart.chart === 'trend'
+          ? 'reports.trend'
+          : 'reports.timeOfDay',
+    );
+  const hours: HourBucket[] | null =
+    chart.chart === 'hours'
+      ? Array.from({ length: 24 }, (_, hour) => ({
+          hour,
+          amountMinor:
+            chart.points.find((p) => Number(p.label) === hour)?.valueMinor ?? 0,
+          count: 0,
+        }))
+      : null;
+  return (
+    <View style={[styles.chartCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <Text style={[styles.chartTitle, { color: colors.inkMuted }]}>{title}</Text>
+      {hours ? (
+        <HourBars hours={hours} currency={currency} locale={locale} />
+      ) : (
+        <LabeledBars points={chart.points} currency={currency} locale={locale} />
+      )}
+      {chart.chart === 'trend' ? (
+        <Text style={[styles.chartLegend, { color: colors.inkMuted }]}>
+          {t(locale, 'app.income')} · {t(locale, 'app.expense')}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+const STARTER_KEYS = [
+  'ai.starter1',
+  'ai.starter2',
+  'ai.starter3',
+  'ai.starter4',
+  'ai.starter5',
+  'ai.starter6',
+] as const;
 
 function chipsFromActions(
   actions: PennyAction[],
@@ -161,7 +212,11 @@ export default function PennyScreen() {
             {
               id: `a-${Date.now()}`,
               role: 'assistant',
-              content: `Saved — ${pending.entryType} ${pending.amountMajor} · ${text}.`,
+              content: t(locale, 'ai.savedEntry', {
+                kind: t(locale, pending.entryType === 'income' ? 'ai.kind.income' : 'ai.kind.expense'),
+                amount: String(pending.amountMajor),
+                category: text,
+              }),
             },
           ]);
           setBusy(false);
@@ -182,6 +237,23 @@ export default function PennyScreen() {
       const space = ledger.spaces.find((s) => s.id === ledger.activeSpaceId);
       const txns = transactionsForSpace(ledger);
       const totals = computePeriodTotals(txns, space?.currency ?? 'USD');
+      const currency = space?.currency ?? 'USD';
+      // Compact rows (newest first) so Penny's get_report can build category / trend / hour charts.
+      const chartTxns = [...txns]
+        .filter(
+          (row) =>
+            (row.type === 'income' || row.type === 'expense') &&
+            row.status === 'confirmed' &&
+            row.currency === currency,
+        )
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+        .slice(0, CONTEXT_TXN_LIMIT)
+        .map((row) => ({
+          type: row.type as 'income' | 'expense',
+          amountMinor: row.amountMinor,
+          categoryId: row.categoryId,
+          occurredAt: row.occurredAt,
+        }));
       const cookie = await getSessionCookie();
 
       const history = [...messages, userMsg]
@@ -199,7 +271,10 @@ export default function PennyScreen() {
           messages: history,
           locale: setup.language,
           context: {
-            currency: space?.currency ?? 'USD',
+            locale: setup.language,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            txns: chartTxns,
+            currency,
             spaceName: space?.name ?? 'Personal',
             spaceId: ledger.activeSpaceId,
             categories: ledger.categories
@@ -214,11 +289,11 @@ export default function PennyScreen() {
               expenseMinor: totals.expenseMinor,
               netMinor: totals.netMinor,
             },
-            recent: txns.slice(0, 12).map((row) => ({
+            recent: txns.slice(0, 6).map((row) => ({
               id: row.id,
               type: row.type,
               amountMinor: row.amountMinor,
-              category: categoryName(ledger, row.categoryId),
+              category: categoryName(ledger, row.categoryId, setup.language),
               description: row.description,
               occurredAt: row.occurredAt,
             })),
@@ -244,6 +319,8 @@ export default function PennyScreen() {
                 kind: r.kind,
                 dayOfMonth: r.dayOfMonth,
                 active: r.active,
+                durationUnit: r.durationUnit,
+                durationCount: r.durationCount,
               })),
             spaces: ledger.spaces.map((s) => ({
               id: s.id,
@@ -279,7 +356,17 @@ export default function PennyScreen() {
       if (applied.applied > 0) {
         ledger = await loadLedger().catch(() => ledger);
       }
-      setMessages((m) => [...m, { id: `a-${Date.now()}`, role: 'assistant', content: reply }]);
+      setMessages((m) => [
+        ...m,
+        {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          content: reply,
+          chart: applied.charts[0]
+            ? { ...applied.charts[0], currency: applied.charts[0].currency ?? currency }
+            : undefined,
+        },
+      ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t(locale, 'ai.error');
       setError(msg);
@@ -324,11 +411,7 @@ export default function PennyScreen() {
         </View>
       ) : null}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={8}
-      >
+      <KeyboardAvoidingWrap keyboardVerticalOffset={8}>
         {historyLoading ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.brand} />
@@ -370,6 +453,9 @@ export default function PennyScreen() {
                   >
                     {item.content}
                   </Text>
+                  {item.chart ? (
+                    <PennyChartCard chart={item.chart} locale={locale} />
+                  ) : null}
                 </View>
               </View>
             )}
@@ -378,16 +464,19 @@ export default function PennyScreen() {
 
         {showStarters ? (
           <View style={styles.chips}>
-            {STARTERS.map((label) => (
+            {STARTER_KEYS.map((key) => {
+              const label = t(locale, key);
+              return (
               <Pressable
-                key={label}
+                key={key}
                 disabled={busy}
                 onPress={() => void send(label)}
                 style={[styles.chip, { borderColor: colors.border, backgroundColor: colors.surface }]}
               >
                 <Text style={{ color: colors.ink, fontSize: 12, fontWeight: '600' }}>{label}</Text>
               </Pressable>
-            ))}
+              );
+            })}
           </View>
         ) : null}
 
@@ -439,7 +528,7 @@ export default function PennyScreen() {
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingWrap>
     </SafeAreaView>
   );
 }
@@ -483,6 +572,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  chartCard: {
+    marginTop: space[3],
+    borderRadius: radius.control,
+    borderWidth: 1,
+    padding: space[3],
+    gap: space[2],
+  },
+  chartTitle: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  chartLegend: { fontSize: 11 },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',

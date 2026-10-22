@@ -4,6 +4,7 @@ import {
   filterVisibleEntries,
   type Goal,
   type LedgerTransaction,
+  type RecurringDurationUnit,
   type SpaceRole,
 } from '@clear-money/domain';
 
@@ -34,6 +35,11 @@ export type RecurringItem = {
   nextDueAt: string | null;
   active: boolean;
   notifyHoursBefore: number;
+  durationUnit: RecurringDurationUnit;
+  /** Positive for months/years; null when forever. */
+  durationCount: number | null;
+  /** Due date of the last posting; null when forever. */
+  endsAt: string | null;
 };
 
 export interface DemoState {
@@ -78,7 +84,13 @@ function normalizeState(parsed: Partial<DemoState>): DemoState {
     categories: parsed.categories ?? [],
     transactions: (parsed.transactions ?? []).filter((t) => t.type !== 'transfer'),
     goals: parsed.goals ?? [],
-    recurring: parsed.recurring ?? [],
+    // Older cached rows predate duration fields.
+    recurring: (parsed.recurring ?? []).map((r) => ({
+      ...r,
+      durationUnit: r.durationUnit ?? 'forever',
+      durationCount: r.durationCount ?? null,
+      endsAt: r.endsAt ?? null,
+    })),
     hiddenIds: Array.isArray(parsed.hiddenIds) ? parsed.hiddenIds : [],
   };
 }

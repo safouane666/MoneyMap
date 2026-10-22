@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { CURRENCY_CATALOG, SHIPPED_LOCALES } from '@clear-money/domain';
 import { t } from '../src/lib/i18n';
 import { apiFetch } from '../src/lib/api';
-import { APP_WEB_URL, CONTACT_EMAIL } from '../src/lib/contact';
+import { APP_WEB_URL, CONTACT_EMAIL, PHRONEXUS_URL } from '../src/lib/contact';
 import { loadLedger, updateSpace } from '../src/lib/ledger';
 import { clearSession } from '../src/lib/session';
 import {
@@ -194,7 +194,9 @@ export default function SettingsScreen() {
           </Pressable>
         ) : null}
         <Pressable onPress={() => void Linking.openSettings()}>
-          <Text style={{ color: colors.brand, fontWeight: '600' }}>System settings</Text>
+          <Text style={{ color: colors.brand, fontWeight: '600' }}>
+            {t(locale, 'settings.systemSettings')}
+          </Text>
         </Pressable>
       </Card>
 
@@ -226,6 +228,27 @@ export default function SettingsScreen() {
             {t(locale, 'settings.openWebsite')}
           </Text>
         </Pressable>
+        <View style={[styles.outline, { borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }]}>
+          <Text style={{ color: colors.inkMuted, fontSize: 13, flex: 1 }}>
+            {t(locale, 'settings.poweredBy')}
+          </Text>
+          <Pressable
+            onPress={() => {
+              void Linking.openURL(PHRONEXUS_URL);
+            }}
+            hitSlop={8}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: radius.control,
+              backgroundColor: colors.brand,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {t(locale, 'settings.visitPhronexus')}
+            </Text>
+          </Pressable>
+        </View>
       </Card>
 
       {signedIn ? (

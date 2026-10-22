@@ -231,13 +231,14 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://$DOMAIN/
 - [x] **P6.3** Fix sync path to `POST /spaces/:spaceId/transactions` with idempotency; share one store between Add and Activity.
 - [x] **P6.4** Home totals from persisted/synced transactions.
 - [x] **P6.5** Offline queue: enqueue when offline; `reconcile` on reconnect without duplicates (use existing `src/offline` tests as contract).
-- [ ] **P6.6** Replace placeholder icons/splash with real assets (512+).
+- [x] **P6.6** Replace placeholder icons/splash with real assets (512+).  
+  _Penny branded `icon.png` / `splash.png` / `adaptive-icon.png` in `apps/mobile/assets` (430KB+ icon)._
 - [x] **P6.7** Add `eas.json` with profiles:
   - `preview` / `apk` → Android **APK** for sideload / internal testers
   - `production` → Android **AAB** (when Play upload is needed)
   - `ios` → iOS build (simulator and/or device / TestFlight)
 - [x] **P6.8** Produce Android APK via EAS (or local) and install on a physical device; confirm it talks to the VPS API.  
-  _APK:_ https://expo.dev/accounts/safouane666/projects/clear-money/builds/85fd0a44-3705-490e-b434-8e28dd89186c (profile `apk`, API was `https://moneymap.phronexus-ai.com/cm-api`; production target is now `https://penny.phronexus-ai.com/cm-api`). Device install + money-loop confirm still human.
+  _Latest APK (v1.0.3 / versionCode 6, profile `apk`, API `https://penny.phronexus-ai.com/cm-api`):_ https://expo.dev/accounts/safouane666/projects/clear-money/builds/b374af99-ab93-4759-addb-efd76dec7e5d — direct: https://expo.dev/artifacts/eas/mORHfLSgNVz1VreKmgZfzSZKWKA95j5dZt08D94FH1Y.apk. Device install + money-loop confirm still human.
 - [ ] **P6.9** Produce iOS build via EAS; run on simulator or TestFlight device against the same API URL. (Apple Developer account required for device/TestFlight.)
 - [x] **P6.10** Document install + API URL in `apps/mobile/README.md` (how to rebuild when domain changes).
 - [x] **P6.11** Remove README claims for camera/biometrics until implemented; trim unused permissions.

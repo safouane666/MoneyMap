@@ -1,27 +1,52 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { formatDate, formatMinorUnits, type LedgerTransaction } from '@clear-money/domain';
+import { FormEvent, useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  currencyDecimalPlaces,
+  filterByCategory,
+  formatDate,
+  formatMinorUnits,
+  parseDisplayAmount,
+  type CurrencyCode,
+  type LedgerTransaction,
+} from '@clear-money/domain';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { CategoryFilter } from '@/components/CategoryFilter';
 import { ExportDialog } from '@/components/ExportDialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   MonthYearFilter,
   currentMonthYear,
   inMonthYear,
   type MonthYear,
 } from '@/components/MonthYearFilter';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { SwipeableActivityRow } from '@/components/SwipeableActivityRow';
 import { useToast } from '@/components/Toast';
 import { useI18n } from '@/lib/i18n';
 import { useLedger } from '@/lib/ledger';
-import { getVisibleSpaceTransactions } from '@/lib/demo-state';
+import { getActiveSpace, getVisibleSpaceTransactions } from '@/lib/demo-state';
+import { cn } from '@/lib/utils';
+
+type TypeFilter = 'all' | 'expense' | 'income';
 
 function ActivityItemContent({
   txn,
   categoryName,
+  currency,
 }: {
   txn: LedgerTransaction;
   categoryName?: string;
+  currency: string;
 }) {
   const { t, locale } = useI18n();
   return (
@@ -40,7 +65,7 @@ function ActivityItemContent({
           }`}
         >
           {txn.type === 'expense' ? '−' : '+'}
-          {formatMinorUnits(txn.amountMinor, txn.currency, locale)}
+          {formatMinorUnits(txn.amountMinor, currency, locale)}
         </p>
         <Badge variant={txn.type === 'income' ? 'income' : 'expense'}>
           {txn.type === 'income' ? t('txn.receive') : t('txn.spend')}
@@ -52,12 +77,18 @@ function ActivityItemContent({
 
 export default function ActivityPage() {
   const { t } = useI18n();
-  const { state, hideTransaction, unhideTransaction, undoTransaction, restoreTransaction } =
-    useLedger();
+  const { state, hideTransaction, unhideTransaction, updateTransaction } = useLedger();
   const { showToast } = useToast();
+  const space = getActiveSpace(state);
   const [monthYear, setMonthYear] = useState<MonthYear>(currentMonthYear);
+  const [categoryId, setCategoryId] = useState<string | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [editing, setEditing] = useState<LedgerTransaction | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
 
-  const txns = useMemo(
+  const monthTxns = useMemo(
     () =>
       getVisibleSpaceTransactions(state).filter(
         (txn) => txn.type !== 'transfer' && inMonthYear(txn.occurredAt, monthYear),
@@ -65,25 +96,83 @@ export default function ActivityPage() {
     [state, monthYear],
   );
 
+  const categoryOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const txn of monthTxns) {
+      if (txn.categoryId) ids.add(txn.categoryId);
+    }
+    return [...ids]
+      .map((id) => ({
+        id,
+        name: state.categories.find((c) => c.id === id)?.name ?? t('reports.other'),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [monthTxns, state.categories, t]);
+
+  const txns = useMemo(() => {
+    let list = filterByCategory(monthTxns, categoryId);
+    if (typeFilter === 'expense') list = list.filter((t) => t.type === 'expense');
+    if (typeFilter === 'income') list = list.filter((t) => t.type === 'income');
+    return list;
+  }, [monthTxns, categoryId, typeFilter]);
+
   const fileSuffix = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, '0')}`;
 
-  const handleHide = (id: string) => {
+  const handleArchive = (id: string) => {
     hideTransaction(id);
     showToast({
-      message: t('app.hidden'),
+      message: t('app.entryArchived'),
       actionLabel: t('app.undo'),
       onAction: () => unhideTransaction(id),
     });
   };
 
-  const handleDelete = (txn: LedgerTransaction) => {
-    undoTransaction(txn.id);
-    showToast({
-      message: t('app.deleted'),
-      actionLabel: t('app.undo'),
-      onAction: () => restoreTransaction(txn),
-    });
+  const openEdit = (txn: LedgerTransaction) => {
+    const decimals = currencyDecimalPlaces(space.currency as CurrencyCode);
+    setEditAmount(String(txn.amountMinor / 10 ** decimals));
+    setEditNote(txn.description ?? '');
+    setEditing(txn);
   };
+
+  const onSaveEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setEditBusy(true);
+    try {
+      const amountMinor = Math.abs(
+        parseDisplayAmount(editAmount || '0', space.currency as CurrencyCode),
+      );
+      if (amountMinor <= 0) throw new Error(t('txn.enterAmount'));
+      updateTransaction(editing.id, {
+        amountMinor,
+        description: editNote.trim() || null,
+      });
+      setEditing(null);
+      showToast({ message: t('app.saved') });
+    } catch (err) {
+      showToast({
+        message: err instanceof Error ? err.message : t('errors.generic'),
+      });
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  const typeChip = (value: TypeFilter, label: string) => (
+    <button
+      key={value}
+      type="button"
+      onClick={() => setTypeFilter(value)}
+      className={cn(
+        'h-8 rounded-[var(--cm-radius-control)] border px-3 text-xs font-semibold',
+        typeFilter === value
+          ? 'border-brand bg-brand-tint text-brand'
+          : 'border-border bg-surface text-ink-secondary',
+      )}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="space-y-6">
@@ -93,6 +182,9 @@ export default function ActivityPage() {
           <p className="mt-1 text-sm text-ink-secondary">{t('app.swipeHint')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/app/archived">{t('app.archived')}</Link>
+          </Button>
           <MonthYearFilter value={monthYear} onChange={setMonthYear} />
           <ExportDialog
             transactions={txns}
@@ -101,6 +193,14 @@ export default function ActivityPage() {
           />
         </div>
       </div>
+
+      <div className="flex flex-wrap gap-2">
+        {typeChip('all', t('app.filterAll'))}
+        {typeChip('expense', t('app.filterSpend'))}
+        {typeChip('income', t('app.filterReceive'))}
+      </div>
+
+      <CategoryFilter options={categoryOptions} value={categoryId} onChange={setCategoryId} />
       {txns.length === 0 ? (
         <div className="animate-reveal stagger-1 rounded-[var(--cm-radius-card)] border border-dashed border-border bg-surface px-6 py-12 text-center">
           <p className="text-sm text-ink-secondary">{t('app.emptyHint')}</p>
@@ -117,16 +217,52 @@ export default function ActivityPage() {
                 style={{ animationDelay: `${60 + index * 35}ms` }}
               >
                 <SwipeableActivityRow
-                  onHide={() => handleHide(txn.id)}
-                  onDelete={() => handleDelete(txn)}
+                  onEdit={() => openEdit(txn)}
+                  onArchive={() => handleArchive(txn.id)}
                 >
-                  <ActivityItemContent txn={txn} categoryName={cat?.name} />
+                  <ActivityItemContent
+                    txn={txn}
+                    categoryName={cat?.name}
+                    currency={space.currency}
+                  />
                 </SwipeableActivityRow>
               </li>
             );
           })}
         </ul>
       )}
+
+      <Dialog open={Boolean(editing)} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('app.edit')}</DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={onSaveEdit}>
+            <div className="space-y-2">
+              <Label htmlFor="edit-amount">{t('txn.amount')}</Label>
+              <Input
+                id="edit-amount"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-note">{t('txn.note')}</Label>
+              <Input
+                id="edit-note"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={editBusy || !editAmount.trim()}>
+                {t('txn.save')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

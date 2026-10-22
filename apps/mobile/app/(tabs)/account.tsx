@@ -127,10 +127,6 @@ export default function AccountScreen() {
           </Text>
         </View>
       ) : null}
-
-      <Pressable onPress={() => router.push('/(tabs)/reports')}>
-        <Text style={{ color: colors.brand, fontWeight: '600' }}>{t(locale, 'nav.reports')} ↗</Text>
-      </Pressable>
     </ScrollView>
   );
 }

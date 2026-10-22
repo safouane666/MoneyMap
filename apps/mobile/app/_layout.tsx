@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { SystemBars } from 'react-native-edge-to-edge';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../src/components/Toast';
 import { ThemeProvider, useThemeColors, useThemeMode } from '../src/theme/ThemeContext';
@@ -10,7 +10,8 @@ function ThemedStack() {
   const mode = useThemeMode();
   return (
     <>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      {/* SystemBars replaces deprecated StatusBar / window inset APIs on Android 15+. */}
+      <SystemBars style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.canvas },
@@ -35,6 +36,10 @@ function ThemedStack() {
         />
         <Stack.Screen name="account" options={{ title: 'Account' }} />
         <Stack.Screen name="settings" options={{ title: 'Settings', headerShown: false }} />
+        <Stack.Screen
+          name="archived-activity"
+          options={{ title: 'Archived', headerShown: false }}
+        />
         <Stack.Screen name="space/[id]" options={{ title: 'Space' }} />
       </Stack>
     </>

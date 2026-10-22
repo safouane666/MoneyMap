@@ -230,8 +230,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <Sheet open={addOpen && canCreate} onOpenChange={setAddOpen}>
-        <SheetContent side="bottom" className="md:inset-y-0 md:start-auto md:end-0 md:max-w-md md:rounded-none md:border-s">
-          <SheetHeader>
+        <SheetContent
+          side="right"
+          className="flex flex-col overflow-hidden max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:h-auto max-md:max-h-[92dvh] max-md:rounded-t-[var(--cm-radius-feature)] max-md:border-t max-md:border-s-0 max-md:end-auto max-md:w-full md:h-dvh md:max-h-dvh md:w-full md:max-w-md md:rounded-none md:overflow-hidden"
+        >
+          <SheetHeader className="shrink-0">
             <SheetTitle>{t('txn.addTitle')}</SheetTitle>
             <p className="text-sm text-ink-secondary">{t('txn.addSubtitle')}</p>
           </SheetHeader>

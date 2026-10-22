@@ -8,14 +8,18 @@ export function ActivityTxnRow({
   item,
   locale,
   category,
+  displayCurrency,
 }: {
   item: LedgerTransaction;
   locale: string;
   category?: string;
+  /** Prefer space currency so legacy rows with a stale txn.currency still format correctly. */
+  displayCurrency?: string;
 }) {
   const colors = useThemeColors();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const income = item.type === 'income';
+  const currency = displayCurrency || item.currency;
 
   return (
     <View style={[styles.row, { backgroundColor: colors.surface }]}>
@@ -31,7 +35,7 @@ export function ActivityTxnRow({
       <View style={styles.right}>
         <Text style={[styles.amount, { color: income ? colors.income : colors.expense }]}>
           {item.type === 'expense' ? '−' : '+'}
-          {formatMinorUnits(item.amountMinor, item.currency, locale)}
+          {formatMinorUnits(item.amountMinor, currency, locale)}
         </Text>
         <View
           style={[

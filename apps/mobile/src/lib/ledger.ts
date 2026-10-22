@@ -1,8 +1,15 @@
-import type { Goal, LedgerTransaction, SpaceRole } from '@clear-money/domain';
+import type {
+  Goal,
+  LedgerTransaction,
+  RecurringDurationUnit,
+  SpaceRole,
+} from '@clear-money/domain';
 import { defaultCategoryRows } from '@clear-money/domain';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './api';
+import { localizedCategoryDisplay } from './category-i18n';
 import { APP_WEB_URL } from './contact';
+import { t } from './i18n';
 import { getPersonalSpaceId, setPersonalSpaceId } from './session';
 import { loadSetupSession } from './setup-session';
 
@@ -36,6 +43,11 @@ export type MobileRecurring = {
   nextDueAt: string | null;
   active: boolean;
   notifyHoursBefore: number;
+  durationUnit: RecurringDurationUnit;
+  /** Positive for months/years; null when forever. */
+  durationCount: number | null;
+  /** Due date of the last posting; null when forever. */
+  endsAt: string | null;
 };
 
 export type MobileLedger = {
@@ -334,7 +346,14 @@ export async function hydrateLedger(): Promise<MobileLedger> {
         if (mapped) transactions.push(mapped);
       }
       for (const g of goalsRows) goals.push(g);
-      for (const r of recurringRows) recurring.push(r);
+      for (const r of recurringRows) {
+        recurring.push({
+          ...r,
+          durationUnit: r.durationUnit ?? 'forever',
+          durationCount: r.durationCount ?? null,
+          endsAt: r.endsAt ?? null,
+        });
+      }
     }),
   );
 
@@ -364,6 +383,8 @@ export async function createRecurring(input: {
   amountMinor: number;
   kind: 'income' | 'expense';
   dayOfMonth: number;
+  durationUnit?: RecurringDurationUnit;
+  durationCount?: number | null;
 }): Promise<MobileRecurring> {
   const res = await apiFetch(`/spaces/${input.spaceId}/recurring`, {
     method: 'POST',
@@ -372,6 +393,8 @@ export async function createRecurring(input: {
       amountMinor: input.amountMinor,
       kind: input.kind,
       dayOfMonth: input.dayOfMonth,
+      durationUnit: input.durationUnit ?? 'forever',
+      durationCount: input.durationCount ?? null,
     }),
   });
   if (!res.ok) {
@@ -390,6 +413,8 @@ export async function updateRecurring(
     kind?: 'income' | 'expense';
     dayOfMonth?: number;
     active?: boolean;
+    durationUnit?: RecurringDurationUnit;
+    durationCount?: number | null;
   },
 ): Promise<MobileRecurring> {
   const res = await apiFetch(`/spaces/${spaceId}/recurring/${id}`, {
@@ -656,7 +681,7 @@ export async function restoreTransaction(txn: LedgerTransaction): Promise<void> 
 
 export async function createSpace(input: {
   name: string;
-  type: 'personal' | 'project' | 'family' | 'company';
+  type: 'personal' | 'household' | 'shared' | 'project' | 'family' | 'company';
   currency?: string;
 }): Promise<MobileSpace> {
   const res = await apiFetch('/spaces', {
@@ -781,9 +806,12 @@ export function recurringForSpace(
 export function categoryName(
   ledger: MobileLedger,
   categoryId: string | null,
+  locale = 'en',
 ): string {
-  if (!categoryId) return 'Uncategorized';
-  return ledger.categories.find((c) => c.id === categoryId)?.name ?? 'Uncategorized';
+  if (!categoryId) return t(locale, 'txn.uncategorized');
+  const cat = ledger.categories.find((c) => c.id === categoryId);
+  if (!cat) return t(locale, 'txn.uncategorized');
+  return localizedCategoryDisplay(locale, cat.name, cat.stableKey);
 }
 
 /** Web host for Penny chat BFF (`/api/ai/chat`). */

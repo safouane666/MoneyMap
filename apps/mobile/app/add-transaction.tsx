@@ -2,13 +2,15 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AmountKeypad } from '../src/components/AmountKeypad';
+import { KeyboardAvoidingWrap } from '../src/components/KeyboardAvoidingWrap';
 import {
-  categoryChipParts,
   createIdempotencyKey,
   formatMinorUnits,
   parseAmountInput,
   type CurrencyCode,
 } from '@clear-money/domain';
+import { localizedCategoryChip } from '../src/lib/category-i18n';
 import { t } from '../src/lib/i18n';
 import { apiFetch } from '../src/lib/api';
 import {
@@ -24,8 +26,6 @@ import { offlineQueue } from '../src/offline/client';
 import { useToast } from '../src/components/Toast';
 import { useThemeColors } from '../src/theme/ThemeContext';
 import { radius, space } from '../src/theme/tokens';
-
-const OPS = ['+', '−', '×', '÷'] as const;
 
 function toLocalInputValue(date = new Date()) {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -94,7 +94,8 @@ export default function AddTransactionModal() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingWrap keyboardVerticalOffset={8}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.ink }]}>{t(locale, 'txn.addTitle')}</Text>
         <Text style={[styles.sub, { color: colors.inkSecondary }]}>{t(locale, 'txn.addSubtitle')}</Text>
 
@@ -107,36 +108,13 @@ export default function AddTransactionModal() {
             },
           ]}
         >
-          <Text style={[styles.currency, { color: colors.inkMuted }]}>{currency}</Text>
-          <TextInput
-            accessibilityLabel={t(locale, 'txn.amount')}
-            keyboardType="numbers-and-punctuation"
+          <AmountKeypad
             value={amount}
-            onChangeText={(text) => setAmount(text.replace(/[^0-9.+\-×÷x*/]/gi, ''))}
-            placeholder="0 or 12+3.5"
-            placeholderTextColor={colors.inkMuted}
-            style={[
-              styles.amount,
-              { color: type === 'expense' ? colors.expense : colors.income },
-            ]}
+            onChange={setAmount}
+            currency={currency}
+            tone={type}
+            calculateLabel={t(locale, 'txn.calculate')}
           />
-          <View style={styles.ops}>
-            {OPS.map((op) => (
-              <Pressable
-                key={op}
-                onPress={() => {
-                  setAmount((prev) => {
-                    if (!prev) return prev;
-                    if (/[+\-−×÷*/x]$/i.test(prev)) return `${prev.slice(0, -1)}${op}`;
-                    return `${prev}${op}`;
-                  });
-                }}
-                style={[styles.opBtn, { backgroundColor: colors.brandTint }]}
-              >
-                <Text style={{ color: colors.brand, fontWeight: '700', fontSize: 18 }}>{op}</Text>
-              </Pressable>
-            ))}
-          </View>
         </View>
 
         <View style={[styles.tabs, { backgroundColor: colors.canvas }]}>
@@ -186,7 +164,7 @@ export default function AddTransactionModal() {
             </Text>
           ) : (
             categories.map((c) => {
-              const parts = categoryChipParts(c.name, c.stableKey);
+              const parts = localizedCategoryChip(locale, c.name, c.stableKey);
               const on = categoryId === c.id;
               return (
                 <View key={c.id} style={styles.chipCell}>
@@ -343,6 +321,7 @@ export default function AddTransactionModal() {
           </Text>
         </Pressable>
       </ScrollView>
+      </KeyboardAvoidingWrap>
     </SafeAreaView>
   );
 }
@@ -352,16 +331,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '600' },
   sub: { fontSize: 14, marginTop: -8 },
   hero: { borderRadius: 20, padding: space[4], gap: space[3] },
-  currency: { fontSize: 13, fontWeight: '600' },
-  amount: { fontSize: 40, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  ops: { flexDirection: 'row', gap: space[2] },
-  opBtn: {
-    flex: 1,
-    minHeight: 40,
-    borderRadius: radius.control,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   tabs: { flexDirection: 'row', borderRadius: radius.control, padding: 4, gap: 4 },
   tab: {
     flex: 1,

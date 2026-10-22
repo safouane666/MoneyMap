@@ -7,6 +7,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { KeyboardAvoidingWrap } from './KeyboardAvoidingWrap';
 import { t } from '../lib/i18n';
 import { createSpace } from '../lib/ledger';
 import { useThemeColors } from '../theme/ThemeContext';
@@ -52,7 +53,9 @@ export function CreateSpaceModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <KeyboardAvoidingWrap style={styles.backdrop} keyboardVerticalOffset={24}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <View style={styles.backdropInner} pointerEvents="box-none">
         <Pressable
           style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={(e) => e.stopPropagation()}
@@ -106,7 +109,8 @@ export function CreateSpaceModal({
             </Text>
           </Pressable>
         </Pressable>
-      </Pressable>
+      </View>
+      </KeyboardAvoidingWrap>
     </Modal>
   );
 }
@@ -115,6 +119,9 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  backdropInner: {
+    flex: 1,
     justifyContent: 'center',
     padding: space[6],
   },

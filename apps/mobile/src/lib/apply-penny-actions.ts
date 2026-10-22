@@ -7,6 +7,7 @@ import {
   parseDisplayAmount,
   stripCategoryEmoji,
   type CurrencyCode,
+  type RecurringDurationUnit,
 } from '@clear-money/domain';
 import { hideTxnId } from './hidden-txns';
 import {
@@ -91,6 +92,8 @@ export type PennyAction =
       amountMajor: number;
       kind: 'income' | 'expense';
       dayOfMonth: number;
+      durationUnit?: 'forever' | 'months' | 'years';
+      durationCount?: number | null;
     }
   | {
       type: 'update_recurring';
@@ -100,6 +103,8 @@ export type PennyAction =
       kind?: 'income' | 'expense';
       dayOfMonth?: number;
       active?: boolean;
+      durationUnit?: 'forever' | 'months' | 'years';
+      durationCount?: number | null;
     }
   | { type: 'delete_recurring'; recurringId: string }
   | {
@@ -115,7 +120,16 @@ export type PennyAction =
       role: 'viewer' | 'contributor' | 'admin' | 'child';
     }
   | { type: 'report'; title: string; body: string }
+  | {
+      type: 'show_chart';
+      chart: 'category' | 'trend' | 'hours';
+      title?: string;
+      currency?: string;
+      points: Array<{ label: string; valueMinor: number; incomeMinor?: number }>;
+    }
   | { type: string; [key: string]: unknown };
+
+export type PennyChart = Extract<PennyAction, { type: 'show_chart' }>;
 
 function majorToMinor(amountMajor: number, currency: string): number | null {
   if (!Number.isFinite(amountMajor) || amountMajor <= 0) return null;
@@ -134,6 +148,7 @@ export async function applyPennyActions(
   applied: number;
   pendingAsk: PennyAction | null;
   reports: Array<{ title: string; body: string }>;
+  charts: PennyChart[];
 }> {
   let categories: MobileCategory[] = [...ledger.categories];
   const spaceId = ledger.activeSpaceId;
@@ -142,6 +157,7 @@ export async function applyPennyActions(
   let applied = 0;
   let pendingAsk: PennyAction | null = null;
   const reports: Array<{ title: string; body: string }> = [];
+  const charts: PennyChart[] = [];
 
   const resolveCat = (
     name: string | undefined,
@@ -193,6 +209,11 @@ export async function applyPennyActions(
       }
       if (action.type === 'report') {
         reports.push({ title: String(action.title), body: String(action.body) });
+        continue;
+      }
+      if (action.type === 'show_chart') {
+        const chart = action as PennyChart;
+        if (Array.isArray(chart.points) && chart.points.length > 0) charts.push(chart);
         continue;
       }
       if (action.type === 'create_category') {
@@ -332,6 +353,8 @@ export async function applyPennyActions(
           amountMinor,
           kind: action.kind as 'income' | 'expense',
           dayOfMonth: Number(action.dayOfMonth) || 1,
+          durationUnit: action.durationUnit as RecurringDurationUnit | undefined,
+          durationCount: action.durationCount as number | null | undefined,
         });
         applied += 1;
         continue;
@@ -347,6 +370,8 @@ export async function applyPennyActions(
           kind: action.kind as 'income' | 'expense' | undefined,
           dayOfMonth: action.dayOfMonth != null ? Number(action.dayOfMonth) : undefined,
           active: typeof action.active === 'boolean' ? action.active : undefined,
+          durationUnit: action.durationUnit as RecurringDurationUnit | undefined,
+          durationCount: action.durationCount as number | null | undefined,
         });
         applied += 1;
         continue;
@@ -386,5 +411,5 @@ export async function applyPennyActions(
     }
   }
 
-  return { applied, pendingAsk, reports };
+  return { applied, pendingAsk, reports, charts };
 }

@@ -1,5 +1,9 @@
 import { AI_TOOLS, buildSystemPrompt, runAiTool } from './tools';
-import { applyDeterministicLedgerFallback, looksLikeLedgerIntent } from './ledger-intent';
+import {
+  applyDeterministicLedgerFallback,
+  looksLikeDeleteIntent,
+  looksLikeLedgerIntent,
+} from './ledger-intent';
 import type { AiAction, AiChatMessage, AiChatResponse, AiLedgerContext } from './types';
 
 interface OpenAiMessage {
@@ -217,31 +221,97 @@ function claimsLedgerSave(reply: string): boolean {
   return /\b(added|logged|saved|recorded|put(?:ting)? it|filed|done|all set)\b/i.test(reply);
 }
 
-function fallbackReply(actions: AiAction[], currency: string): string {
+function fallbackReply(actions: AiAction[], currency: string, locale = 'en'): string {
+  const lang = locale.toLowerCase().slice(0, 2);
   const ask = actions.find((a) => a.type === 'ask_category');
   if (ask && ask.type === 'ask_category') {
+    if (lang === 'fr') {
+      return ask.entryType === 'expense'
+        ? `Compris — ${ask.amountMajor} ${currency} dépensés. Quelle catégorie ?`
+        : `Super — ${ask.amountMajor} ${currency} reçus. Quel type de revenu ?`;
+    }
+    if (lang === 'ar') {
+      return ask.entryType === 'expense'
+        ? `تم — ${ask.amountMajor} ${currency}. ما الفئة؟`
+        : `حسنًا — ${ask.amountMajor} ${currency}. ما نوع الدخل؟`;
+    }
     return ask.entryType === 'expense'
       ? `Got it — ${ask.amountMajor} ${currency} out the door. Where should we park this one?`
       : `Nice — ${ask.amountMajor} ${currency} coming in. What kind of income is this?`;
   }
   if (actions.length === 0) {
+    if (lang === 'fr') {
+      return 'Je peux enregistrer une dépense/revenu, créer des catégories ou résumer cet espace. Ex. « j’ai dépensé 12 en café ».';
+    }
+    if (lang === 'ar') {
+      return 'يمكنني تسجيل مصروف/دخل أو إنشاء فئات أو تلخيص المساحة. مثال: « صرفت 12 على قهوة ».';
+    }
     return 'I can log spend/receive, create categories, or summarize this space. Try “spent 12 on coffee”.';
   }
   const bits: string[] = [];
   for (const action of actions) {
     if (action.type === 'create_category') {
-      bits.push(`category “${action.name}”`);
-    } else if (action.type === 'add_transaction') {
       bits.push(
-        `${action.entryType === 'expense' ? 'expense' : 'income'} ${action.amountMajor} ${currency}${action.category ? ` · ${action.category}` : ''}`,
+        lang === 'fr'
+          ? `catégorie « ${action.name} »`
+          : lang === 'ar'
+            ? `فئة « ${action.name} »`
+            : `category “${action.name}”`,
+      );
+    } else if (action.type === 'add_transaction') {
+      const kind =
+        action.entryType === 'expense'
+          ? lang === 'fr'
+            ? 'dépense'
+            : lang === 'ar'
+              ? 'مصروف'
+              : 'expense'
+          : lang === 'fr'
+            ? 'revenu'
+            : lang === 'ar'
+              ? 'دخل'
+              : 'income';
+      bits.push(
+        `${kind} ${action.amountMajor} ${currency}${action.category ? ` · ${action.category}` : ''}`,
       );
     } else if (action.type === 'update_transaction') {
-      bits.push('an entry update');
+      bits.push(lang === 'fr' ? 'une mise à jour' : lang === 'ar' ? 'تحديث' : 'an entry update');
     } else if (action.type === 'report') {
-      bits.push('a summary');
+      bits.push(lang === 'fr' ? 'un résumé' : lang === 'ar' ? 'ملخص' : 'a summary');
+    } else if (action.type === 'delete_transaction') {
+      bits.push(lang === 'fr' ? 'suppression' : lang === 'ar' ? 'حذف' : 'a deletion');
     }
   }
-  return bits.length ? `Logged — ${bits.join(', ')}.` : 'All set.';
+  if (!bits.length) {
+    return lang === 'fr' ? 'C’est fait.' : lang === 'ar' ? 'تم.' : 'All set.';
+  }
+  if (lang === 'fr') return `C’est noté — ${bits.join(', ')}.`;
+  if (lang === 'ar') return `تم — ${bits.join('، ')}.`;
+  return `Logged — ${bits.join(', ')}.`;
+}
+
+function stripUnsafeDeletes(lastUser: AiChatMessage | undefined, actions: AiAction[]): AiAction[] {
+  if (!lastUser || looksLikeDeleteIntent(lastUser.content)) return actions;
+  return actions.filter(
+    (a) =>
+      a.type !== 'delete_transaction' &&
+      a.type !== 'delete_goal' &&
+      a.type !== 'delete_recurring' &&
+      a.type !== 'delete_category' &&
+      a.type !== 'hide_transaction',
+  );
+}
+
+/** Shown when the model tried to delete/hide on a message that did not clearly ask for it. */
+function clarifyDeleteReply(locale = 'en'): string {
+  const lang = locale.toLowerCase().slice(0, 2);
+  if (lang === 'fr') {
+    return 'Je n’ai rien supprimé. Dites-moi précisément quoi supprimer (ex. « supprime la dernière dépense »).';
+  }
+  if (lang === 'ar') {
+    return 'لم أحذف شيئًا. أخبرني بالضبط ما الذي تريد حذفه (مثال: « احذف آخر مصروف »).';
+  }
+  return 'I haven’t deleted anything. Tell me exactly what to remove (e.g. “delete the last expense”).';
 }
 
 /** Ensure spend/income utterances produce real ledger actions even if the model skipped or misfired tools. */
@@ -263,7 +333,7 @@ export async function runAiChat(input: {
   const actions: AiAction[] = [];
   const history: OpenAiMessage[] = [
     { role: 'system', content: buildSystemPrompt(input.context) },
-    ...input.messages.slice(-12).map((m) => ({
+    ...input.messages.slice(-6).map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     })),
@@ -271,6 +341,7 @@ export async function runAiChat(input: {
 
   const lastUser = [...input.messages].reverse().find((m) => m.role === 'user');
   const forceTools = Boolean(lastUser && looksLikeLedgerIntent(lastUser.content));
+  const locale = input.context.locale || 'en';
 
   for (let round = 0; round < 6; round += 1) {
     const message = await callChat(history, true, forceTools && round === 0);
@@ -307,8 +378,14 @@ export async function runAiChat(input: {
 
     // Model skipped / misfired tools — still apply structured ledger actions for clear intents.
     await ensureLedgerActions(lastUser, input.context, actions);
+    const safeActions = stripUnsafeDeletes(lastUser, actions);
+    const blockedDelete = safeActions.length < actions.length;
+    actions.length = 0;
+    actions.push(...safeActions);
 
     let reply = messageText(message);
+    // The model may still claim it deleted something after we stripped the action.
+    if (blockedDelete) reply = clarifyDeleteReply(locale);
     if (!reply && actions.length > 0) {
       const confirm = await callChat(
         [
@@ -319,7 +396,7 @@ export async function runAiChat(input: {
           },
           {
             role: 'user',
-            content: 'Confirm what you just did for the ledger in one short sentence. No tools.',
+            content: `Confirm what you just did for the ledger in one short sentence in ${locale}. No tools.`,
           },
         ],
         false,
@@ -340,27 +417,28 @@ export async function runAiChat(input: {
       if (!reply || invented || askCategory) {
         // For ask_category always prefer the chip prompt; for other actions replace invented saves.
         if (askCategory || !toolCalls.length || invented) {
-          reply = fallbackReply(actions, input.context.currency);
+          reply = fallbackReply(actions, input.context.currency, locale);
         }
       }
     }
 
     return {
-      reply: reply || fallbackReply(actions, input.context.currency),
+      reply: reply || fallbackReply(actions, input.context.currency, locale),
       actions,
       suggestions: askCategory?.suggestions,
     };
   }
 
   await ensureLedgerActions(lastUser, input.context, actions);
+  const safeActions = stripUnsafeDeletes(lastUser, actions);
 
-  const askCategory = actions.find(
+  const askCategory = safeActions.find(
     (a): a is Extract<AiAction, { type: 'ask_category' }> => a.type === 'ask_category',
   );
 
   return {
-    reply: fallbackReply(actions, input.context.currency),
-    actions,
+    reply: fallbackReply(safeActions, input.context.currency, locale),
+    actions: safeActions,
     suggestions: askCategory?.suggestions,
   };
 }

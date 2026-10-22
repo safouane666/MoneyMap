@@ -36,6 +36,90 @@ export function advanceNextDueAt(currentDueAt: Date, dayOfMonth: number): Date {
   return utcNoon(y, m + 1, day);
 }
 
+export type RecurringDurationUnit = 'forever' | 'months' | 'years';
+
+export const RECURRING_DURATION_UNITS: readonly RecurringDurationUnit[] = [
+  'forever',
+  'months',
+  'years',
+];
+
+/** Upper bound for durationCount (e.g. 600 months / 50 years). */
+export const MAX_RECURRING_DURATION_COUNT = 600;
+
+export function isRecurringDurationUnit(v: unknown): v is RecurringDurationUnit {
+  return v === 'forever' || v === 'months' || v === 'years';
+}
+
+export type RecurringDuration = {
+  durationUnit: RecurringDurationUnit;
+  durationCount: number | null;
+};
+
+/**
+ * Validate + normalize a duration. `forever` ignores the count (null).
+ * `months` / `years` need a positive integer count.
+ */
+export function normalizeRecurringDuration(
+  unit: unknown,
+  count: unknown,
+): { ok: true; value: RecurringDuration } | { ok: false; error: string } {
+  if (unit === undefined || unit === null) unit = 'forever';
+  if (!isRecurringDurationUnit(unit)) {
+    return { ok: false, error: 'durationUnit must be forever, months or years' };
+  }
+  if (unit === 'forever') {
+    return { ok: true, value: { durationUnit: 'forever', durationCount: null } };
+  }
+  const n = typeof count === 'string' ? Number(count) : count;
+  if (
+    typeof n !== 'number' ||
+    !Number.isFinite(n) ||
+    n !== Math.trunc(n) ||
+    n < 1 ||
+    n > MAX_RECURRING_DURATION_COUNT
+  ) {
+    return {
+      ok: false,
+      error: `durationCount must be an integer between 1 and ${MAX_RECURRING_DURATION_COUNT}`,
+    };
+  }
+  return { ok: true, value: { durationUnit: unit, durationCount: n } };
+}
+
+/** Total number of monthly postings for a duration, or null when forever. */
+export function recurringDurationMonths(
+  unit: RecurringDurationUnit,
+  count: number | null | undefined,
+): number | null {
+  if (unit === 'forever' || !count || count < 1) return null;
+  return unit === 'years' ? count * 12 : count;
+}
+
+/**
+ * `endsAt` = due date of the LAST posting. The first posting is `firstDueAt`,
+ * so N months → N postings (firstDueAt + (N - 1) months). Null when forever.
+ */
+export function computeRecurringEndsAt(
+  firstDueAt: Date,
+  dayOfMonth: number,
+  unit: RecurringDurationUnit,
+  count: number | null | undefined,
+): Date | null {
+  const months = recurringDurationMonths(unit, count);
+  if (months === null) return null;
+  const day = clampDayOfMonth(dayOfMonth);
+  return utcNoon(firstDueAt.getUTCFullYear(), firstDueAt.getUTCMonth() + months - 1, day);
+}
+
+/** True when a posting due at `dueAt` falls after the recurring item's `endsAt`. */
+export function isPastRecurringEnd(
+  dueAt: Date,
+  endsAt: Date | null | undefined,
+): boolean {
+  return !!endsAt && dueAt.getTime() > endsAt.getTime();
+}
+
 /** Idempotency guard: already posted in the same UTC calendar month as `now`. */
 export function wasPostedThisCalendarMonth(
   lastPostedAt: Date | null | undefined,

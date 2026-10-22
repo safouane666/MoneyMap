@@ -122,30 +122,32 @@ function TabsChrome() {
             }}
           />
           <Tabs.Screen
-            name="account"
+            name="reports"
             options={{
-              title: t(locale, 'nav.account'),
+              title: t(locale, 'nav.reports'),
               tabBarIcon: ({ focused }) =>
-                tabIcon(focused ? 'person' : 'person-outline', focused),
+                tabIcon(focused ? 'pie-chart' : 'pie-chart-outline', focused),
             }}
           />
-          <Tabs.Screen name="reports" options={{ href: null, title: 'Reports' }} />
+          {/* Account/settings stay reachable from the header avatar. */}
+          <Tabs.Screen name="account" options={{ href: null, title: t(locale, 'nav.account') }} />
         </Tabs>
       </View>
 
       {canCreate ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t(locale, 'nav.add')}
-          onPress={() => router.push('/add-transaction')}
-          style={[
-            styles.fab,
-            { bottom: barHeight + 4, backgroundColor: colors.brand },
-            shadow.fab,
-          ]}
+        <View
+          pointerEvents="box-none"
+          style={[styles.fabSlot, { bottom: barHeight + 4 }]}
         >
-          <Ionicons name="add" size={28} color="#FFFFFF" />
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t(locale, 'nav.add')}
+            onPress={() => router.push('/add-transaction')}
+            style={[styles.fab, { backgroundColor: colors.brand }, shadow.fab]}
+          >
+            <Ionicons name="add" size={28} color="#FFFFFF" />
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -159,16 +161,20 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   tabs: { flex: 1 },
-  fab: {
+  // Full-width slot avoids `left: '50%'` ghosts on some Android devices.
+  fabSlot: {
     position: 'absolute',
-    alignSelf: 'center',
-    left: '50%',
-    marginLeft: -(touchTarget + 8) / 2,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+    elevation: 50,
+  },
+  fab: {
     width: touchTarget + 8,
     height: touchTarget + 8,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 50,
   },
 });

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   currencyDecimalPlaces,
+  formatMinorUnits,
   matchDefaultCategoryHint,
   monthlyTargetMinor,
   parseDisplayAmount,
@@ -55,6 +56,7 @@ import {
   parseMoneyUtterance,
   type MoneyDraft,
 } from '@/lib/ai/ledger-intent';
+import { AI_CONTEXT_TXN_LIMIT } from '@/lib/ai/types';
 import type {
   AiAction,
   AiChatMessage,
@@ -127,12 +129,78 @@ const ICON_MAP = {
 
 type IconKey = keyof typeof ICON_MAP;
 
+type AiChartAction = Extract<AiAction, { type: 'show_chart' }>;
+
 interface UiMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   report?: { title: string; body: string };
+  chart?: AiChartAction;
   suggestions?: AiSuggestion[];
+}
+
+const CHART_INCOME = '#1EC569';
+const CHART_EXPENSE = '#D95D5D';
+const CHART_HOUR = '#159A72';
+
+/** Small inline bars for Penny's `show_chart` action (category / trend / hours). */
+function AiChartCard({ chart, fallbackCurrency }: { chart: AiChartAction; fallbackCurrency: string }) {
+  const { t, locale } = useI18n();
+  if (!chart.points.length) return null;
+  const currency = chart.currency ?? fallbackCurrency;
+  const title =
+    chart.title ??
+    t(
+      chart.chart === 'category'
+        ? 'reports.categories'
+        : chart.chart === 'trend'
+          ? 'reports.trend'
+          : 'reports.timeOfDay',
+    );
+  const max = Math.max(1, ...chart.points.flatMap((p) => [p.valueMinor, p.incomeMinor ?? 0]));
+  const pct = (minor: number) => `${Math.max(minor > 0 ? 3 : 0, Math.round((minor / max) * 100))}%`;
+  const barColor = chart.chart === 'hours' ? CHART_HOUR : CHART_EXPENSE;
+
+  return (
+    <div
+      className="mt-3 rounded-[var(--cm-radius-control)] border border-border bg-surface p-3 text-ink"
+      role="img"
+      aria-label={title}
+    >
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</p>
+      <ul className="mt-2 space-y-1.5">
+        {chart.points.map((p, i) => (
+          <li key={`${p.label}-${i}`} className="flex items-center gap-2 text-xs">
+            <span className="w-16 shrink-0 truncate text-ink-secondary">
+              {chart.chart === 'hours' ? `${p.label}:00` : p.label}
+            </span>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              {chart.chart === 'trend' && (p.incomeMinor ?? 0) > 0 ? (
+                <div
+                  className="h-1.5 rounded-full"
+                  style={{ width: pct(p.incomeMinor ?? 0), background: CHART_INCOME }}
+                />
+              ) : null}
+              <div
+                className="h-1.5 rounded-full"
+                style={{ width: pct(p.valueMinor), background: barColor }}
+              />
+            </div>
+            <span className="w-20 shrink-0 text-end tabular-nums text-ink-secondary">
+              {formatMinorUnits(p.valueMinor, currency, locale)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {chart.chart === 'trend' ? (
+        <p className="mt-2 flex gap-3 text-[11px] text-ink-muted">
+          <span style={{ color: CHART_INCOME }}>● {t('app.income')}</span>
+          <span style={{ color: CHART_EXPENSE }}>● {t('app.expense')}</span>
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function turnsToMessages(turns: PennyTurnRow[]): UiMessage[] {
@@ -244,6 +312,8 @@ async function applyImmediateActions(
       amountMinor: number;
       kind: 'income' | 'expense';
       dayOfMonth: number;
+      durationUnit?: 'forever' | 'months' | 'years';
+      durationCount?: number | null;
     }) => Promise<unknown>;
     updateRecurring: (
       id: string,
@@ -253,6 +323,8 @@ async function applyImmediateActions(
         kind?: 'income' | 'expense';
         dayOfMonth?: number;
         active?: boolean;
+        durationUnit?: 'forever' | 'months' | 'years';
+        durationCount?: number | null;
       },
     ) => Promise<void>;
     deleteRecurring: (id: string) => Promise<void>;
@@ -266,6 +338,7 @@ async function applyImmediateActions(
   },
 ) {
   const reports: Array<{ title: string; body: string }> = [];
+  const charts: AiChartAction[] = [];
   let categories = [...helpers.categories];
   let applied = 0;
   let pending: PendingEntry | null = null;
@@ -494,6 +567,8 @@ async function applyImmediateActions(
           amountMinor,
           kind: action.kind,
           dayOfMonth: action.dayOfMonth,
+          durationUnit: action.durationUnit,
+          durationCount: action.durationCount,
         });
         applied += 1;
       } catch {
@@ -511,6 +586,8 @@ async function applyImmediateActions(
           kind: action.kind,
           dayOfMonth: action.dayOfMonth,
           active: action.active,
+          durationUnit: action.durationUnit,
+          durationCount: action.durationCount,
         });
         applied += 1;
       } catch {
@@ -548,12 +625,15 @@ async function applyImmediateActions(
       }
     } else if (action.type === 'report') {
       reports.push({ title: action.title, body: action.body });
+    } else if (action.type === 'show_chart') {
+      if (Array.isArray(action.points) && action.points.length > 0) charts.push(action);
     }
   }
 
   return {
     applied,
     reports,
+    charts,
     pending,
     categorySuggestions,
     lastCreatedId,
@@ -630,7 +710,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     const totals = getSpaceTotals(state, space.id);
     const recent = getVisibleSpaceTransactions(state, space.id)
       .filter((txn) => txn.type !== 'transfer')
-      .slice(0, 12)
+      .slice(0, 6)
       .map((txn) => ({
         id: txn.id,
         type: txn.type,
@@ -640,10 +720,29 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         occurredAt: txn.occurredAt,
       }));
 
+    // Compact rows so Penny's get_report can build category / trend / hour charts.
+    const txns = getVisibleSpaceTransactions(state, space.id)
+      .filter(
+        (txn) =>
+          (txn.type === 'income' || txn.type === 'expense') &&
+          txn.status === 'confirmed' &&
+          txn.currency === space.currency,
+      )
+      .slice(0, AI_CONTEXT_TXN_LIMIT)
+      .map((txn) => ({
+        type: txn.type as 'income' | 'expense',
+        amountMinor: txn.amountMinor,
+        categoryId: txn.categoryId,
+        occurredAt: txn.occurredAt,
+      }));
+
     return {
       currency: space.currency,
       spaceName: space.name,
       spaceId: space.id,
+      locale,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      txns,
       categories: state.categories
         .filter((c) => c.spaceId == null || c.spaceId === space.id)
         .map((c) => ({ id: c.id, name: c.name, type: c.type })),
@@ -675,6 +774,8 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
           kind: r.kind,
           dayOfMonth: r.dayOfMonth,
           active: r.active,
+          durationUnit: r.durationUnit,
+          durationCount: r.durationCount,
         })),
       spaces: state.spaces.map((s) => ({
         id: s.id,
@@ -682,7 +783,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         currency: s.currency,
       })),
     };
-  }, [space.currency, space.id, space.name, state]);
+  }, [space.currency, space.id, space.name, state, locale]);
 
   const scrollToEnd = () => {
     requestAnimationFrame(() => {
@@ -1230,6 +1331,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
             role: 'assistant',
             content: replyText,
             report: result.reports[0],
+            chart: result.charts[0],
             suggestions,
           },
         ]);
@@ -1243,6 +1345,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
             role: 'assistant',
             content: replyText,
             report: result.reports[0],
+            chart: result.charts[0],
           },
         ]);
         if (result.goalsCreated > 0) {
@@ -1443,6 +1546,9 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
                     </p>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{msg.report.body}</p>
                   </div>
+                ) : null}
+                {msg.chart ? (
+                  <AiChartCard chart={msg.chart} fallbackCurrency={space.currency} />
                 ) : null}
               </div>
             </div>

@@ -3,40 +3,38 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { SetupShell } from '../../src/components/SetupShell';
-import { PrimaryButton } from '../../src/components/ui';
+import { SetupNavRow } from '../../src/components/SetupNavRow';
+import { useSetupLocale } from '../../src/lib/setup-locale';
 import { markSetupStep, saveSetupSession } from '../../src/lib/setup-session';
 import { nextSetupRoute } from '../../src/lib/setup-steps';
 import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { t } = useSetupLocale();
   const [enabled, setEnabled] = useState(true);
 
   return (
     <SetupShell stepId="notifications">
-      <Text style={styles.title}>Gentle nudges</Text>
-      <Text style={styles.body}>
-        Optional daily facts and weekly reviews — never spammy, always yours to turn off.
-      </Text>
+      <Text style={styles.title}>{t('setup.notificationsTitle')}</Text>
+      <Text style={styles.body}>{t('setup.notificationsBody')}</Text>
       <Pressable
         onPress={() => setEnabled(true)}
         style={[styles.card, enabled && styles.cardOn]}
       >
-        <Text style={[styles.cardTitle, enabled && styles.on]}>Yes, enable reminders</Text>
-        <Text style={styles.cardBody}>
-          Stay gently aware of spending without opening the app every day.
-        </Text>
+        <Text style={[styles.cardTitle, enabled && styles.on]}>{t('setup.enable')}</Text>
+        <Text style={styles.cardBody}>{t('setup.notificationsBenefit')}</Text>
       </Pressable>
       <Pressable
         onPress={() => setEnabled(false)}
         style={[styles.card, !enabled && styles.cardOn]}
       >
-        <Text style={[styles.cardTitle, !enabled && styles.on]}>Not now</Text>
+        <Text style={[styles.cardTitle, !enabled && styles.on]}>{t('setup.disable')}</Text>
       </Pressable>
       <View style={{ height: space[4] }} />
-      <PrimaryButton
-        label="Continue"
-        onPress={async () => {
+      <SetupNavRow
+        stepId="notifications"
+        onContinue={async () => {
           await saveSetupSession({ notificationsEnabled: enabled });
           await markSetupStep('notifications');
           if (enabled) {

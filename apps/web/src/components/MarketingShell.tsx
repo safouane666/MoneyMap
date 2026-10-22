@@ -115,6 +115,11 @@ export function MarketingShell({ children }: { children: React.ReactNode }) {
                   {t('footer.contact')}
                 </Link>
               </li>
+              <li>
+                <Link href="/delete-data" className="text-ink-secondary hover:text-ink">
+                  Delete data
+                </Link>
+              </li>
             </ul>
           </div>
         </div>

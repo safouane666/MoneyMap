@@ -66,12 +66,19 @@ export default function PrivacyPage() {
             <h2 className="text-lg font-semibold text-ink">4. Retention & deletion</h2>
             <p className="mt-2">
               We keep account and ledger data while your account is active. You may request account
-              deletion by emailing{' '}
+              and data deletion at{' '}
+              <Link
+                href="/delete-data"
+                className="font-medium text-brand underline-offset-4 hover:underline"
+              >
+                https://penny.phronexus-ai.com/delete-data
+              </Link>{' '}
+              (or by emailing{' '}
               <a className="font-medium text-brand underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
-              . After verification we delete or anonymize personal data except where retention is
-              legally required.
+              ). After verification we delete or anonymize personal data within 30 days, except where
+              retention is legally required.
             </p>
           </section>
 

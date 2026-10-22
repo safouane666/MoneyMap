@@ -3,6 +3,7 @@ export * from './money/index.js';
 export * from './categories/defaults.js';
 export * from './reports/totals.js';
 export * from './reports/time.js';
+export * from './reports/analytics.js';
 export * from './goals/index.js';
 export * from './permissions/index.js';
 export * from './entitlements/index.js';

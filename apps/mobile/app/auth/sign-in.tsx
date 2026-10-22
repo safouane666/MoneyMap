@@ -7,10 +7,12 @@ import { GoogleSignInButton } from '../../src/components/GoogleSignInButton';
 import { PennyAvatar } from '../../src/components/penny/PennyFigure';
 import { Body, PrimaryButton, SecondaryButton, Title } from '../../src/components/ui';
 import { AuthError, signInWithEmail } from '../../src/lib/auth';
+import { useSetupLocale } from '../../src/lib/setup-locale';
 import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function SignInScreen() {
   const router = useRouter();
+  const { t } = useSetupLocale();
   const params = useLocalSearchParams<{ skip?: string }>();
   const allowSkip = params.skip === '1';
   const [email, setEmail] = useState('');
@@ -26,7 +28,7 @@ export default function SignInScreen() {
       await signInWithEmail(email, password);
       router.replace('/(tabs)/home');
     } catch (err) {
-      setError(err instanceof AuthError ? err.message : 'Sign in failed');
+      setError(err instanceof AuthError ? err.message : t('auth.signInFailed'));
     } finally {
       setLoading(false);
     }
@@ -40,47 +42,51 @@ export default function SignInScreen() {
         <PennyAvatar pose="wave" size="lg" />
       </View>
       <View style={styles.card}>
-        <Title>Welcome back</Title>
-        <Body>Sign in to sync your spaces across devices.</Body>
+        <Title>{t('auth.signInTitle')}</Title>
+        <Body>{t('auth.signInBody')}</Body>
         <GoogleSignInButton
           migrateGuest={false}
+          label={t('auth.google')}
           onSuccess={() => router.replace('/(tabs)/home')}
           onError={setError}
         />
-        <Text style={styles.or}>or email</Text>
+        <Text style={styles.or}>{t('auth.orEmail')}</Text>
         <TextInput
-          accessibilityLabel="Email"
+          accessibilityLabel={t('auth.email')}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoComplete="email"
-          placeholder="Email"
+          placeholder={t('auth.email')}
           placeholderTextColor={colors.inkMuted}
           editable={!loading}
           style={styles.input}
         />
         <TextInput
-          accessibilityLabel="Password"
+          accessibilityLabel={t('auth.password')}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           autoComplete="password"
-          placeholder="Password"
+          placeholder={t('auth.password')}
           placeholderTextColor={colors.inkMuted}
           editable={!loading}
           style={styles.input}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <PrimaryButton
-          label={loading ? 'Signing in…' : 'Sign in'}
+          label={loading ? t('auth.signingIn') : t('auth.submitSignIn')}
           onPress={() => void onSubmit()}
         />
         <View style={{ height: space[3] }} />
-        <SecondaryButton label="Create account" onPress={() => router.push('/auth/sign-up')} />
+        <SecondaryButton
+          label={t('auth.submitSignUp')}
+          onPress={() => router.push('/auth/sign-up')}
+        />
         {allowSkip ? (
           <Pressable onPress={() => router.replace('/(tabs)/home')} style={styles.skip}>
-            <Text style={styles.skipText}>Continue without an account</Text>
+            <Text style={styles.skipText}>{t('setup.skipAccount')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -111,6 +117,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: space[5],
   },
+  or: {
+    textAlign: 'center',
+    color: colors.inkMuted,
+    fontSize: 13,
+    marginVertical: space[3],
+  },
   input: {
     minHeight: 48,
     borderWidth: 1,
@@ -118,16 +130,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.control,
     paddingHorizontal: space[4],
     marginBottom: space[3],
-    backgroundColor: colors.canvas,
     color: colors.ink,
+    backgroundColor: colors.canvas,
   },
-  error: { color: colors.expense, marginBottom: space[3] },
-  or: {
-    textAlign: 'center',
-    color: colors.inkMuted,
-    fontSize: 12,
-    marginBottom: space[3],
-  },
+  error: { color: colors.expense, marginBottom: space[3], fontSize: 13 },
   skip: { marginTop: space[4], alignItems: 'center' },
-  skipText: { color: colors.brand, fontWeight: '600', fontSize: 14 },
+  skipText: { color: colors.brand, fontWeight: '600' },
 });

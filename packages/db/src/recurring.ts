@@ -2,6 +2,7 @@ import { and, eq, lte } from 'drizzle-orm';
 import {
   advanceNextDueAt,
   createId,
+  isPastRecurringEnd,
   recurringIdempotencyKey,
   wasPostedThisCalendarMonth,
 } from '@clear-money/domain';
@@ -56,6 +57,26 @@ export async function postDueRecurring(
     const dayOfMonth = row.dayOfMonth ?? 1;
     const dueAt = row.nextDueAt ?? now;
 
+    // Fixed-duration items stop once the next posting would fall after endsAt.
+    if (isPastRecurringEnd(dueAt, row.endsAt)) {
+      await db
+        .update(scheduledExpenses)
+        .set({ active: false })
+        .where(eq(scheduledExpenses.id, row.id));
+      skipped += 1;
+      continue;
+    }
+
+    /** Advance to next month; deactivate when that falls past endsAt. */
+    const advancePatch = () => {
+      const next = advanceNextDueAt(dueAt, dayOfMonth);
+      return {
+        lastPostedAt: now,
+        nextDueAt: next,
+        ...(isPastRecurringEnd(next, row.endsAt) ? { active: false } : {}),
+      };
+    };
+
     let createdBy = row.createdBy ?? opts.actorUserId ?? null;
     if (!createdBy) {
       const space = (
@@ -82,14 +103,19 @@ export async function postDueRecurring(
     if (existing[0]) {
       await db
         .update(scheduledExpenses)
-        .set({
-          lastPostedAt: now,
-          nextDueAt: advanceNextDueAt(dueAt, dayOfMonth),
-        })
+        .set(advancePatch())
         .where(eq(scheduledExpenses.id, row.id));
       skipped += 1;
       continue;
     }
+
+    // Always post in the space currency. UI parses amounts with the space currency, but
+    // legacy scheduled rows may still carry a stale currency (e.g. USD) which made
+    // TND millimes render as dollars (200.000 TND → $2,000.00).
+    const spaceRow = (
+      await db.select().from(spaces).where(eq(spaces.id, row.spaceId)).limit(1)
+    )[0];
+    const postCurrency = spaceRow?.currency ?? row.currency;
 
     const txnId = createId('txn');
     await db.insert(transactions).values({
@@ -97,7 +123,7 @@ export async function postDueRecurring(
       spaceId: row.spaceId,
       type: kind,
       amountMinor: row.amountMinor,
-      currency: row.currency,
+      currency: postCurrency,
       categoryId: null,
       description: row.name,
       occurredAt: dueAt,
@@ -111,8 +137,8 @@ export async function postDueRecurring(
     await db
       .update(scheduledExpenses)
       .set({
-        lastPostedAt: now,
-        nextDueAt: advanceNextDueAt(dueAt, dayOfMonth),
+        ...advancePatch(),
+        ...(row.currency !== postCurrency ? { currency: postCurrency } : {}),
       })
       .where(eq(scheduledExpenses.id, row.id));
 

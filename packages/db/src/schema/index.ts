@@ -232,6 +232,12 @@ export const scheduledExpenses = pgTable(
     active: boolean('active').notNull().default(true),
     lastPostedAt: timestamp('last_posted_at', { withTimezone: true }),
     notifyHoursBefore: integer('notify_hours_before').notNull().default(24),
+    /** forever | months | years */
+    durationUnit: text('duration_unit').notNull().default('forever'),
+    /** Positive count for months/years; null when forever. */
+    durationCount: integer('duration_count'),
+    /** Due date of the last posting (computed); null when forever. */
+    endsAt: timestamp('ends_at', { withTimezone: true }),
     createdBy: text('created_by').references(() => user.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

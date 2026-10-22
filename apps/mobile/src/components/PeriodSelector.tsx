@@ -1,28 +1,40 @@
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ReportPeriod } from '@clear-money/domain';
 import { t } from '../lib/i18n';
 import { useThemeColors } from '../theme/ThemeContext';
 import { radius, space } from '../theme/tokens';
 
+/** @deprecated Prefer ReportPeriod; kept for home callers. */
 export type Period = 'thisWeek' | 'thisMonth' | 'lastMonth';
 
-/** Compact dropdown matching web PeriodSelector (h-11 / ~176px trigger). */
+const PERIOD_KEYS: Record<ReportPeriod, string> = {
+  thisWeek: 'home.thisWeek',
+  thisMonth: 'home.thisMonth',
+  lastMonth: 'home.lastMonth',
+  last3Months: 'home.last3Months',
+  thisYear: 'home.thisYear',
+  allTime: 'home.allTime',
+};
+
+/** Compact dropdown matching web PeriodSelector. */
 export function PeriodSelector({
   value,
   onChange,
   locale = 'en',
+  extended = false,
 }: {
-  value: Period;
-  onChange: (value: Period) => void;
+  value: ReportPeriod | Period;
+  onChange: (value: ReportPeriod) => void;
   locale?: string;
+  extended?: boolean;
 }) {
   const colors = useThemeColors();
   const [open, setOpen] = useState(false);
-  const options: { value: Period; label: string }[] = [
-    { value: 'thisWeek', label: t(locale, 'home.thisWeek') },
-    { value: 'thisMonth', label: t(locale, 'home.thisMonth') },
-    { value: 'lastMonth', label: t(locale, 'home.lastMonth') },
-  ];
+  const periods: ReportPeriod[] = extended
+    ? ['thisWeek', 'thisMonth', 'lastMonth', 'last3Months', 'thisYear', 'allTime']
+    : ['thisWeek', 'thisMonth', 'lastMonth'];
+  const options = periods.map((p) => ({ value: p, label: t(locale, PERIOD_KEYS[p]) }));
   const current = options.find((o) => o.value === value)?.label ?? t(locale, 'home.thisMonth');
 
   return (
@@ -82,7 +94,6 @@ export function PeriodSelector({
 }
 
 const styles = StyleSheet.create({
-  // Match web: label + select in one row so "Period" never ellipsizes.
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',

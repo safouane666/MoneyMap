@@ -51,8 +51,11 @@ export default function ContactPage() {
               version, and steps to reproduce.
             </li>
             <li>
-              <strong className="text-ink">Privacy & deletion</strong> — request access or account
-              deletion from the email on your Penny account.
+              <strong className="text-ink">Privacy & deletion</strong> — request account deletion at{' '}
+              <Link href="/delete-data" className="font-medium text-brand underline-offset-4 hover:underline">
+                /delete-data
+              </Link>{' '}
+              using the email on your Penny account.
             </li>
             <li>
               <strong className="text-ink">Reviews</strong> — share feedback on the{' '}

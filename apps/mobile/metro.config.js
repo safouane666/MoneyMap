@@ -5,7 +5,7 @@ const projectRoot = __dirname;
 const config = getDefaultConfig(projectRoot);
 
 /**
- * Web (Next) installs React 19 at the repo root; mobile needs React 18.3.1.
+ * Monorepo may hoist a different React at the repo root.
  * Mixed copies → Hermes "TypeError: property is not writable" and a white screen.
  * Force Metro to always resolve React / RN from apps/mobile.
  */

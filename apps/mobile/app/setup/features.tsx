@@ -1,52 +1,45 @@
 import { useRef, useState } from 'react';
 import {
-  Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { SetupShell } from '../../src/components/SetupShell';
 import { PrimaryButton, SecondaryButton } from '../../src/components/ui';
+import { useSetupLocale } from '../../src/lib/setup-locale';
 import { markSetupStep } from '../../src/lib/setup-session';
-import { nextSetupRoute } from '../../src/lib/setup-steps';
+import { nextSetupRoute, prevSetupRoute } from '../../src/lib/setup-steps';
 import { colors, radius, space } from '../../src/theme/tokens';
 
-const SLIDES = [
-  {
-    title: 'A calm ledger',
-    body: 'Capture income and spending in seconds — clear totals, no spreadsheet stress.',
-  },
-  {
-    title: 'Spaces that stay separate',
-    body: 'Personal, shared, or project money — each with its own picture.',
-  },
-  {
-    title: 'AI that helps, quietly',
-    body: 'Ask in plain language. Get answers without leaving your flow.',
-  },
-];
-
-const WIDTH = Dimensions.get('window').width - space[4] * 2;
+const SLIDE_KEYS = [
+  { title: 'setup.features.ledgerTitle', body: 'setup.features.ledgerBody' },
+  { title: 'setup.features.spacesTitle', body: 'setup.features.spacesBody' },
+  { title: 'setup.features.aiTitle', body: 'setup.features.aiBody' },
+] as const;
 
 export default function FeaturesScreen() {
   const router = useRouter();
+  const { t } = useSetupLocale();
+  const { width: windowWidth } = useWindowDimensions();
+  const slideWidth = Math.max(280, windowWidth - space[4] * 2);
   const [index, setIndex] = useState(0);
   const ref = useRef<ScrollView>(null);
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const i = Math.round(e.nativeEvent.contentOffset.x / WIDTH);
+    const i = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
     setIndex(i);
   };
 
   return (
     <SetupShell stepId="features">
-      <Text style={styles.title}>Here&apos;s what you get</Text>
-      <Text style={styles.body}>Swipe through the highlights, then we&apos;ll finish your preferences.</Text>
+      <Text style={styles.title}>{t('setup.featuresTitle')}</Text>
+      <Text style={styles.body}>{t('setup.featuresBody')}</Text>
       <ScrollView
         ref={ref}
         horizontal
@@ -56,39 +49,44 @@ export default function FeaturesScreen() {
         scrollEventThrottle={16}
         style={{ marginBottom: space[3] }}
       >
-        {SLIDES.map((s) => (
-          <View key={s.title} style={[styles.slide, { width: WIDTH }]}>
-            <Text style={styles.slideTitle}>{s.title}</Text>
-            <Text style={styles.slideBody}>{s.body}</Text>
+        {SLIDE_KEYS.map((s) => (
+          <View key={s.title} style={[styles.slide, { width: slideWidth }]}>
+            <Text style={styles.slideTitle}>{t(s.title)}</Text>
+            <Text style={styles.slideBody}>{t(s.body)}</Text>
           </View>
         ))}
       </ScrollView>
       <View style={styles.dots}>
-        {SLIDES.map((_, i) => (
+        {SLIDE_KEYS.map((_, i) => (
           <View key={i} style={[styles.dot, i === index && styles.dotOn]} />
         ))}
       </View>
       <View style={styles.row}>
         <SecondaryButton
-          label="Back"
+          label={t('setup.features.prev')}
           onPress={() => {
-            const next = Math.max(0, index - 1);
-            ref.current?.scrollTo({ x: next * WIDTH, animated: true });
-            setIndex(next);
+            if (index > 0) {
+              const next = index - 1;
+              ref.current?.scrollTo({ x: next * slideWidth, animated: true });
+              setIndex(next);
+              return;
+            }
+            const backTo = prevSetupRoute('features');
+            if (backTo) router.replace(backTo as Href);
           }}
         />
-        {index < SLIDES.length - 1 ? (
+        {index < SLIDE_KEYS.length - 1 ? (
           <PrimaryButton
-            label="Next"
+            label={t('setup.features.next')}
             onPress={() => {
-              const next = Math.min(SLIDES.length - 1, index + 1);
-              ref.current?.scrollTo({ x: next * WIDTH, animated: true });
+              const next = Math.min(SLIDE_KEYS.length - 1, index + 1);
+              ref.current?.scrollTo({ x: next * slideWidth, animated: true });
               setIndex(next);
             }}
           />
         ) : (
           <PrimaryButton
-            label="Continue"
+            label={t('setup.continue')}
             onPress={async () => {
               await markSetupStep('features');
               router.push(nextSetupRoute('features') as Href);

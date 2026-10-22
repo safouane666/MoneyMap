@@ -1,47 +1,54 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter, type Href } from 'expo-router';
 import { SetupShell } from '../../src/components/SetupShell';
 import { PrimaryButton } from '../../src/components/ui';
-import { markSetupStep, saveSetupSession, type SetupLanguage } from '../../src/lib/setup-session';
+import { useSetupLocale } from '../../src/lib/setup-locale';
+import { markSetupStep, type SetupLanguage } from '../../src/lib/setup-session';
 import { nextSetupRoute } from '../../src/lib/setup-steps';
 import { colors, radius, space } from '../../src/theme/tokens';
 
-const LANGS: Array<{ code: SetupLanguage; label: string; english: string }> = [
-  { code: 'en', label: 'English', english: 'English' },
-  { code: 'fr', label: 'Français', english: 'French' },
-  { code: 'ar', label: 'العربية', english: 'Arabic' },
+const LANGS: Array<{ code: SetupLanguage; label: string; englishKey: string }> = [
+  { code: 'en', label: 'English', englishKey: 'setup.lang.en' },
+  { code: 'fr', label: 'Français', englishKey: 'setup.lang.fr' },
+  { code: 'ar', label: 'العربية', englishKey: 'setup.lang.ar' },
 ];
 
 export default function LanguageScreen() {
   const router = useRouter();
-  const [selected, setSelected] = useState<SetupLanguage>('en');
+  const { locale, setLocale, t } = useSetupLocale();
+  const [selected, setSelected] = useState<SetupLanguage>(locale);
+
+  useEffect(() => {
+    setSelected(locale);
+  }, [locale]);
 
   return (
     <SetupShell stepId="language">
-      <Text style={styles.title}>Pick your language</Text>
-      <Text style={styles.body}>
-        We&apos;ll coach you in the language you choose — change it anytime.
-      </Text>
+      <Text style={styles.title}>{t('setup.languageTitle')}</Text>
+      <Text style={styles.body}>{t('setup.languageBody')}</Text>
       <View style={styles.list}>
         {LANGS.map((l) => {
           const on = selected === l.code;
           return (
             <Pressable
               key={l.code}
-              onPress={() => setSelected(l.code)}
+              onPress={() => {
+                setSelected(l.code);
+                void setLocale(l.code);
+              }}
               style={[styles.card, on && styles.cardOn]}
             >
               <Text style={[styles.cardTitle, on && styles.cardTitleOn]}>{l.label}</Text>
-              <Text style={styles.cardSub}>{l.english}</Text>
+              <Text style={styles.cardSub}>{t(l.englishKey)}</Text>
             </Pressable>
           );
         })}
       </View>
       <PrimaryButton
-        label="Continue"
+        label={t('setup.continue')}
         onPress={async () => {
-          await saveSetupSession({ language: selected });
+          await setLocale(selected);
           await markSetupStep('language');
           router.push(nextSetupRoute('language') as Href);
         }}

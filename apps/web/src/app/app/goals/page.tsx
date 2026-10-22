@@ -10,9 +10,9 @@ import {
   type Goal,
 } from '@clear-money/domain';
 import { GoalCard } from '@/components/GoalCard';
+import { SafeToSpendPanel } from '@/components/SafeToSpendPanel';
 import { PlanGate } from '@/components/PlanGate';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -219,39 +219,16 @@ export default function GoalsPage() {
         <p className="text-xs text-ink-muted">{t('goals.freeCap')}</p>
       ) : null}
 
-      <p className="text-sm text-ink-secondary">{t('goals.savedManualNote')}</p>
+      <p className="text-xs text-ink-muted">{t('goals.savedManualNote')}</p>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t('goals.safeToSpend')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {safe.status === 'insufficient' ? (
-            <p className="text-sm text-ink-secondary">{t('goals.insufficient')}</p>
-          ) : (
-            <>
-              <p className="text-2xl font-semibold tabular-nums text-ink">
-                {formatMinorUnits(safe.estimateMinor ?? 0, safe.currency, locale)}
-              </p>
-              <p className="text-sm text-ink-secondary">{safe.message}</p>
-              <ul className="space-y-1 text-sm text-ink-secondary">
-                {safe.breakdown.map((row) => (
-                  <li key={row.label} className="flex justify-between gap-4">
-                    <span>{row.label}</span>
-                    <span className="tabular-nums">
-                      {formatMinorUnits(row.amountMinor, safe.currency, locale)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <SafeToSpendPanel safe={safe} incomeMinor={totals.incomeMinor} locale={locale} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         {goals.length === 0 ? (
-          <p className="text-sm text-ink-secondary">{t('goals.empty')}</p>
+          <div className="col-span-full rounded-[var(--cm-radius-card)] border border-dashed border-border bg-surface/60 px-6 py-10 text-center sm:col-span-2">
+            <p className="text-base font-medium text-ink">{t('goals.empty')}</p>
+            <p className="mt-2 text-sm text-ink-secondary">{t('goals.emptyHint')}</p>
+          </div>
         ) : (
           goals.map((goal) => (
             <div key={goal.id} className="space-y-2">

@@ -1,8 +1,19 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import {
+  categoryBreakdown,
+  computePeriodTotals,
+  filterByCategory,
+  filterTransactionsByPeriod,
+  formatMinorUnits,
+  incomeExpenseTrend,
+  spendingByHourOfDay,
+  type ReportPeriod,
+} from '@clear-money/domain';
 import { CategoryBreakdown } from '@/components/CategoryBreakdown';
-import { PeriodSelector, type Period } from '@/components/PeriodSelector';
+import { CategoryFilter } from '@/components/CategoryFilter';
+import { PeriodSelector } from '@/components/PeriodSelector';
 import { ExportDialog } from '@/components/ExportDialog';
 import {
   MonthYearFilter,
@@ -10,51 +21,109 @@ import {
   inMonthYear,
   type MonthYear,
 } from '@/components/MonthYearFilter';
+import { HourOfDayChart, TrendChart } from '@/components/ReportCharts';
 import { SummaryCard } from '@/components/SummaryCard';
 import { useI18n } from '@/lib/i18n';
 import { useLedger } from '@/lib/ledger';
-import {
-  categoryBreakdown,
-  getActiveSpace,
-  getSpaceTotals,
-  getSpaceTransactions,
-} from '@/lib/demo-state';
+import { getActiveSpace, getSpaceTransactions } from '@/lib/demo-state';
 
-type ReportMode = Period | 'pickMonth';
-
-function inPeriod(iso: string, period: Period): boolean {
-  const d = new Date(iso);
-  const now = new Date();
-  if (period === 'thisWeek') {
-    const start = new Date(now);
-    start.setDate(now.getDate() - now.getDay());
-    start.setHours(0, 0, 0, 0);
-    return d >= start;
-  }
-  if (period === 'thisMonth') {
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }
-  const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  return d.getMonth() === last.getMonth() && d.getFullYear() === last.getFullYear();
-}
+type ReportMode = ReportPeriod | 'pickMonth';
 
 export default function ReportsPage() {
   const { t, locale } = useI18n();
   const { state } = useLedger();
   const [mode, setMode] = useState<ReportMode>('thisMonth');
   const [monthYear, setMonthYear] = useState<MonthYear>(currentMonthYear);
+  const [categoryId, setCategoryId] = useState<string | 'all'>('all');
   const space = getActiveSpace(state);
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const filtered = useMemo(() => {
-    const all = getSpaceTransactions(state).filter((txn) => txn.type !== 'transfer');
-    if (mode === 'pickMonth') return all.filter((txn) => inMonthYear(txn.occurredAt, monthYear));
-    return all.filter((txn) => inPeriod(txn.occurredAt, mode));
-  }, [state, mode, monthYear]);
+  const allTxns = useMemo(
+    () => getSpaceTransactions(state).filter((txn) => txn.type !== 'transfer'),
+    [state],
+  );
 
-  const scoped = useMemo(() => ({ ...state, transactions: filtered }), [filtered, state]);
-  const totals = useMemo(() => getSpaceTotals(scoped, space.id), [scoped, space.id]);
-  const breakdown = useMemo(() => categoryBreakdown(scoped, space.id), [scoped, space.id]);
+  const nameFor = (id: string | null) => {
+    if (!id) return t('reports.other');
+    return state.categories.find((c) => c.id === id)?.name ?? t('reports.other');
+  };
+
+  const periodScoped = useMemo(() => {
+    if (mode === 'pickMonth') {
+      return allTxns.filter((txn) => inMonthYear(txn.occurredAt, monthYear));
+    }
+    return filterTransactionsByPeriod(allTxns, mode);
+  }, [allTxns, mode, monthYear]);
+
+  const categoryOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const txn of periodScoped) {
+      if (txn.type === 'expense' && txn.categoryId) ids.add(txn.categoryId);
+    }
+    return [...ids]
+      .map((id) => ({ id, name: nameFor(id) }))
+      .sort((a, b) => a.name.localeCompare(b.name, locale));
+  }, [periodScoped, state.categories, locale, t]);
+
+  const filtered = useMemo(
+    () => filterByCategory(periodScoped, categoryId),
+    [periodScoped, categoryId],
+  );
+
+  const totals = useMemo(
+    () => computePeriodTotals(filtered, space.currency),
+    [filtered, space.currency],
+  );
+  const categories = useMemo(
+    () => categoryBreakdown(filtered, space.currency, nameFor, 'expense'),
+    [filtered, space.currency, state.categories, t],
+  );
+  const hours = useMemo(
+    () => spendingByHourOfDay(filtered, space.currency, tz),
+    [filtered, space.currency, tz],
+  );
+  const trend = useMemo(() => {
+    if (mode === 'pickMonth') {
+      return incomeExpenseTrend(
+        filterByCategory(allTxns, categoryId),
+        space.currency,
+        'thisMonth',
+      ).filter((p) => {
+        const d = new Date(p.date);
+        return d.getMonth() === monthYear.month && d.getFullYear() === monthYear.year;
+      });
+    }
+    return incomeExpenseTrend(
+      filterByCategory(allTxns, categoryId),
+      space.currency,
+      mode,
+    );
+  }, [allTxns, mode, monthYear, categoryId, space.currency]);
+
+  const daysInRange = Math.max(1, (() => {
+    if (mode === 'pickMonth') {
+      return new Date(monthYear.year, monthYear.month + 1, 0).getDate();
+    }
+    if (mode === 'allTime' && filtered.length) {
+      const times = filtered.map((x) => Date.parse(x.occurredAt)).filter(Number.isFinite);
+      if (times.length) {
+        return Math.max(1, Math.round((Math.max(...times) - Math.min(...times)) / 86_400_000) + 1);
+      }
+    }
+    const map: Partial<Record<ReportPeriod, number>> = {
+      thisWeek: 7,
+      thisMonth: new Date().getDate(),
+      lastMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 0).getDate(),
+      last3Months: 90,
+      thisYear: Math.floor(
+        (Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86_400_000,
+      ) + 1,
+    };
+    return map[mode as ReportPeriod] ?? 30;
+  })());
+  const avgDaily = Math.round(totals.expenseMinor / daysInRange);
   const savesMinor = totals.netMinor;
+  const topCategory = categories[0] ?? null;
 
   const fileSuffix =
     mode === 'pickMonth'
@@ -67,6 +136,7 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">{t('nav.reports')}</h1>
         <div className="flex flex-wrap items-center gap-2">
           <PeriodSelector
+            extended
             value={mode === 'pickMonth' ? 'thisMonth' : mode}
             onChange={(p) => setMode(p)}
           />
@@ -92,6 +162,8 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      <CategoryFilter options={categoryOptions} value={categoryId} onChange={setCategoryId} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label={t('app.saves')}
@@ -102,11 +174,11 @@ export default function ReportsPage() {
           className="stagger-1"
         />
         <SummaryCard
-          label={t('app.net')}
-          amountMinor={totals.netMinor}
+          label={t('reports.avgDaily')}
+          amountMinor={avgDaily}
           currency={space.currency}
           locale={locale}
-          tone="net"
+          tone="expense"
           className="stagger-2"
         />
         <SummaryCard
@@ -127,10 +199,30 @@ export default function ReportsPage() {
         />
       </div>
 
-      <div className="rounded-[var(--cm-radius-card)] border border-border bg-surface p-5 cm-shadow animate-reveal stagger-2">
-        <h2 className="mb-4 text-sm font-medium text-ink-secondary">{t('app.categories')}</h2>
-        <CategoryBreakdown items={breakdown} currency={space.currency} locale={locale} />
-      </div>
+      <section className="animate-reveal stagger-1">
+        <h2 className="mb-3 text-sm font-medium text-ink-secondary">{t('reports.trend')}</h2>
+        <TrendChart points={trend} currency={space.currency} locale={locale} />
+      </section>
+
+      <section className="animate-reveal stagger-2">
+        <h2 className="mb-3 text-sm font-medium text-ink-secondary">{t('app.categories')}</h2>
+        <CategoryBreakdown
+          items={categories.map((c) => ({ name: c.name, amountMinor: c.amountMinor }))}
+          currency={space.currency}
+          locale={locale}
+        />
+      </section>
+
+      <section className="animate-reveal stagger-3">
+        <h2 className="mb-3 text-sm font-medium text-ink-secondary">{t('reports.timeOfDay')}</h2>
+        <HourOfDayChart hours={hours} currency={space.currency} locale={locale} />
+        {topCategory ? (
+          <p className="mt-2 text-xs text-ink-muted">
+            {t('reports.topCategory')}: {topCategory.name} ·{' '}
+            {formatMinorUnits(topCategory.amountMinor, space.currency, locale)}
+          </p>
+        ) : null}
+      </section>
     </div>
   );
 }

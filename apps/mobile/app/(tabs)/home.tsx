@@ -1,15 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
   computePeriodTotals,
   computeSafeToSpend,
+  currencyDecimalPlaces,
   monthlyTargetMinor,
+  parseDisplayAmount,
+  type CurrencyCode,
   type LedgerTransaction,
 } from '@clear-money/domain';
 import { CategoryBreakdown } from '../../src/components/CategoryBreakdown';
 import { GoalCard } from '../../src/components/GoalCard';
+import { KeyboardAvoidingWrap } from '../../src/components/KeyboardAvoidingWrap';
 import { MonthlyShareCard } from '../../src/components/MonthlyShareCard';
 import { PeriodSelector, type Period } from '../../src/components/PeriodSelector';
 import { RecurringHomeSection } from '../../src/components/RecurringHomeSection';
@@ -18,14 +22,17 @@ import { ActivityTxnRow } from '../../src/components/ActivityTxnRow';
 import { SwipeableActivityRow } from '../../src/components/SwipeableActivityRow';
 import { useToast } from '../../src/components/Toast';
 import { t } from '../../src/lib/i18n';
-import { hideTxnId, loadHiddenTxnIds, unhideTxnId } from '../../src/lib/hidden-txns';
+import {
+  archiveTxnId,
+  loadArchivedTxnIds,
+  restoreArchivedTxnId,
+} from '../../src/lib/archived-txns';
 import {
   categoryName,
-  deleteTransaction,
   goalsForSpace,
   loadLedger,
   recurringForSpace,
-  restoreTransaction,
+  updateTransaction,
   visibleTransactionsForSpace,
   type MobileLedger,
 } from '../../src/lib/ledger';
@@ -53,11 +60,12 @@ function inPeriod(iso: string, period: Period): boolean {
 function categoryBreakdown(
   ledger: MobileLedger,
   txns: LedgerTransaction[],
+  locale: string,
 ): Array<{ name: string; amountMinor: number }> {
   const map = new Map<string, number>();
   for (const txn of txns) {
     if (txn.type !== 'expense') continue;
-    const name = categoryName(ledger, txn.categoryId);
+    const name = categoryName(ledger, txn.categoryId, locale);
     map.set(name, (map.get(name) ?? 0) + txn.amountMinor);
   }
   return [...map.entries()]
@@ -75,14 +83,18 @@ export default function HomeScreen() {
   const [ledger, setLedger] = useState<MobileLedger | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<Period>('thisMonth');
-  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [archivedIds, setArchivedIds] = useState<string[]>([]);
+  const [editing, setEditing] = useState<LedgerTransaction | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       void (async () => {
         const setup = await loadSetupSession();
         setLocale(setup.language);
-        setHiddenIds(await loadHiddenTxnIds());
+        setArchivedIds(await loadArchivedTxnIds());
         await offlineQueue.reconcile().catch(() => undefined);
         try {
           setLedger(await loadLedger());
@@ -99,10 +111,10 @@ export default function HomeScreen() {
 
   const filtered = useMemo(() => {
     if (!ledger) return [];
-    return visibleTransactionsForSpace(ledger, hiddenIds).filter((txn) =>
+    return visibleTransactionsForSpace(ledger, archivedIds).filter((txn) =>
       inPeriod(txn.occurredAt, period),
     );
-  }, [ledger, period, hiddenIds]);
+  }, [ledger, period, archivedIds]);
 
   const totals = useMemo(
     () => computePeriodTotals(filtered, currency),
@@ -151,7 +163,7 @@ export default function HomeScreen() {
   ]);
 
   const recent = filtered.slice(0, 6);
-  const breakdown = ledger ? categoryBreakdown(ledger, filtered) : [];
+  const breakdown = ledger ? categoryBreakdown(ledger, filtered, locale) : [];
 
   const periodLabel =
     period === 'thisWeek'
@@ -162,36 +174,43 @@ export default function HomeScreen() {
 
   const guest = !ledger || ledger.userId === 'guest';
 
-  const handleHide = async (id: string) => {
-    setHiddenIds(await hideTxnId(id));
+  const handleArchive = async (id: string) => {
+    setArchivedIds(await archiveTxnId(id));
     showToast({
-      message: t(locale, 'app.hidden'),
+      message: t(locale, 'app.entryArchived'),
       actionLabel: t(locale, 'app.undo'),
       onAction: () => {
-        void unhideTxnId(id).then(setHiddenIds);
+        void restoreArchivedTxnId(id).then(setArchivedIds);
       },
     });
   };
 
-  const handleDelete = async (txn: LedgerTransaction) => {
+  const openEdit = (txn: LedgerTransaction) => {
+    const decimals = currencyDecimalPlaces(currency as CurrencyCode);
+    setEditAmount(String(txn.amountMinor / 10 ** decimals));
+    setEditNote(txn.description ?? '');
+    setEditing(txn);
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    setEditBusy(true);
     try {
-      await deleteTransaction(txn.spaceId, txn.id);
-      setLedger((prev) =>
-        prev
-          ? { ...prev, transactions: prev.transactions.filter((row) => row.id !== txn.id) }
-          : prev,
+      const amountMinor = Math.abs(
+        parseDisplayAmount(editAmount || '0', currency as CurrencyCode),
       );
-      showToast({
-        message: t(locale, 'app.deleted'),
-        actionLabel: t(locale, 'app.undo'),
-        onAction: () => {
-          void restoreTransaction(txn).then(async () => {
-            setLedger(await loadLedger());
-          });
-        },
+      if (amountMinor <= 0) throw new Error(t(locale, 'txn.enterAmount'));
+      await updateTransaction(editing.spaceId, editing.id, {
+        amountMinor,
+        description: editNote.trim() || null,
       });
+      setEditing(null);
+      setLedger(await loadLedger());
+      showToast({ message: t(locale, 'app.saved') });
     } catch (err) {
       showToast({ message: err instanceof Error ? err.message : t(locale, 'errors.generic') });
+    } finally {
+      setEditBusy(false);
     }
   };
 
@@ -211,7 +230,11 @@ export default function HomeScreen() {
               {t(locale, 'home.title')}
             </Text>
           </View>
-          <PeriodSelector value={period} onChange={setPeriod} locale={locale} />
+          <PeriodSelector
+            value={period}
+            onChange={(p) => setPeriod(p as Period)}
+            locale={locale}
+          />
         </View>
 
         {guest ? (
@@ -225,10 +248,12 @@ export default function HomeScreen() {
             ]}
           >
             <Text style={[styles.bannerText, { color: colors.inkSecondary }]}>
-              Continuing without an account — sign in anytime from Account to sync.
+              {t(locale, 'guest.banner')}
             </Text>
             <Pressable onPress={() => router.push('/auth/sign-in')}>
-              <Text style={[styles.bannerCta, { color: colors.brand }]}>Sign in</Text>
+              <Text style={[styles.bannerCta, { color: colors.brand }]}>
+                {t(locale, 'nav.signIn')}
+              </Text>
             </Pressable>
           </View>
         ) : null}
@@ -403,13 +428,14 @@ export default function HomeScreen() {
                 >
                   <SwipeableActivityRow
                     locale={locale}
-                    onHide={() => void handleHide(item.id)}
-                    onDelete={() => void handleDelete(item)}
+                    onEdit={() => openEdit(item)}
+                    onArchive={() => void handleArchive(item.id)}
                   >
                     <ActivityTxnRow
                       item={item}
                       locale={locale}
-                      category={ledger ? categoryName(ledger, item.categoryId) : ''}
+                      category={ledger ? categoryName(ledger, item.categoryId, locale) : ''}
+                      displayCurrency={currency}
                     />
                   </SwipeableActivityRow>
                 </View>
@@ -418,6 +444,40 @@ export default function HomeScreen() {
           )}
         </Section>
       </ScrollView>
+
+      <Modal visible={Boolean(editing)} transparent animationType="fade" onRequestClose={() => setEditing(null)}>
+        <KeyboardAvoidingWrap style={styles.modalRoot}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setEditing(null)} />
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.modalTitle, { color: colors.ink }]}>{t(locale, 'app.editEntry')}</Text>
+            <Text style={[styles.modalLabel, { color: colors.inkSecondary }]}>{t(locale, 'txn.amount')}</Text>
+            <TextInput
+              value={editAmount}
+              onChangeText={setEditAmount}
+              keyboardType="decimal-pad"
+              style={[styles.input, { borderColor: colors.border, color: colors.ink, backgroundColor: colors.elevated }]}
+            />
+            <Text style={[styles.modalLabel, { color: colors.inkSecondary }]}>{t(locale, 'txn.note')}</Text>
+            <TextInput
+              value={editNote}
+              onChangeText={setEditNote}
+              style={[styles.input, { borderColor: colors.border, color: colors.ink, backgroundColor: colors.elevated }]}
+            />
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setEditing(null)} style={[styles.modalBtn, { borderColor: colors.border }]}>
+                <Text style={{ color: colors.inkSecondary, fontWeight: '600' }}>{t(locale, 'app.undo')}</Text>
+              </Pressable>
+              <Pressable
+                disabled={editBusy}
+                onPress={() => void saveEdit()}
+                style={[styles.modalBtnPrimary, { backgroundColor: colors.brand, opacity: editBusy ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{t(locale, 'app.saveChanges')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingWrap>
+      </Modal>
     </View>
   );
 }
@@ -548,4 +608,37 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   badgeText: { fontSize: 11, fontWeight: '600' },
+  modalRoot: { flex: 1, justifyContent: 'center', padding: space[5] },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalCard: {
+    borderRadius: radius.feature,
+    borderWidth: 1,
+    padding: space[5],
+    gap: space[3],
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700' },
+  modalLabel: { fontSize: 13, fontWeight: '600' },
+  input: {
+    minHeight: 44,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    paddingHorizontal: space[3],
+    fontSize: 16,
+  },
+  modalActions: { flexDirection: 'row', gap: space[2], marginTop: space[2] },
+  modalBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnPrimary: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

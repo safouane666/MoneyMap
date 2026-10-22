@@ -329,6 +329,13 @@ export function PennyFigureSkia({
   const doTilt = useSharedValue(0);
 
   useEffect(() => {
+    if (compact) {
+      floatY.value = 0;
+      rotate.value = 0;
+      scale.value = 1;
+      doTilt.value = 0;
+      return;
+    }
     floatY.value = withRepeat(
       withTiming(-4, { duration: 1900, easing: Easing.inOut(Easing.sin) }),
       -1,
@@ -360,7 +367,7 @@ export function PennyFigureSkia({
     } else {
       scale.value = withTiming(1, { duration: 200 });
     }
-  }, [kit, floatY, rotate, scale, doTilt]);
+  }, [kit, compact, floatY, rotate, scale, doTilt]);
 
   const motionStyle = useAnimatedStyle(() => ({
     transform: [
@@ -370,11 +377,11 @@ export function PennyFigureSkia({
     ],
   }));
 
-  // Match web viewBox: compact '0 20 200 180' else '-20 -10 240 230'
-  const vbX = compact ? 0 : -20;
+  // Compact crop centered on the coin (matches PennyFigureSvg).
+  const vbX = compact ? 20 : -20;
   const vbY = compact ? 20 : -10;
-  const vbW = compact ? 200 : 240;
-  const vbH = compact ? 180 : 230;
+  const vbW = compact ? 160 : 240;
+  const vbH = compact ? 160 : 230;
 
   return (
     <Animated.View
@@ -417,7 +424,7 @@ export function PennyAvatarSkia({
   size?: 'sm' | 'nav' | 'md' | 'lg';
   name?: string;
 }) {
-  const px = size === 'lg' ? 148 : size === 'md' ? 72 : size === 'nav' ? 48 : 36;
+  const px = size === 'lg' ? 148 : size === 'md' ? 72 : size === 'nav' ? 40 : 36;
   const compact = size === 'sm' || size === 'nav';
   return (
     <View style={styles.avatar}>

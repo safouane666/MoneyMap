@@ -1,24 +1,24 @@
 'use client';
 
 import { useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { EyeOff, Trash2 } from 'lucide-react';
+import { Archive, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n';
 
 const ACTION_WIDTH = 88;
-const COMMIT_RATIO = 0.55;
 
 interface SwipeableActivityRowProps {
   children: ReactNode;
-  onHide: () => void;
-  onDelete: () => void;
+  onEdit: () => void;
+  onArchive: () => void;
   className?: string;
 }
 
+/** Swipe reveals buttons; user must click a button to act (can swipe back to close). */
 export function SwipeableActivityRow({
   children,
-  onHide,
-  onDelete,
+  onEdit,
+  onArchive,
   className,
 }: SwipeableActivityRowProps) {
   const { t } = useI18n();
@@ -39,17 +39,7 @@ export function SwipeableActivityRow({
     setOffset(value);
   };
 
-  const commitOrSnap = (next: number) => {
-    if (next <= -ACTION_WIDTH * COMMIT_RATIO) {
-      setLiveOffset(0);
-      onDelete();
-      return;
-    }
-    if (next >= ACTION_WIDTH * COMMIT_RATIO) {
-      setLiveOffset(0);
-      onHide();
-      return;
-    }
+  const snap = (next: number) => {
     if (next < -ACTION_WIDTH * 0.35) {
       setLiveOffset(-ACTION_WIDTH);
       return;
@@ -79,41 +69,27 @@ export function SwipeableActivityRow({
     const dy = e.clientY - startY.current;
 
     if (!axisLocked.current) {
-      if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       axisLocked.current = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
       if (axisLocked.current === 'y') {
         draggingRef.current = false;
         setDragging(false);
-        pointerId.current = null;
-        try {
-          e.currentTarget.releasePointerCapture(e.pointerId);
-        } catch {
-          /* already released */
-        }
         return;
       }
     }
-
     if (axisLocked.current !== 'x') return;
-    e.preventDefault();
     setLiveOffset(clamp(startOffset.current + dx));
   };
 
-  const endDrag = (e: PointerEvent<HTMLDivElement>) => {
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     if (pointerId.current !== e.pointerId) return;
-    pointerId.current = null;
-    const wasHorizontal = axisLocked.current === 'x';
+    if (draggingRef.current && axisLocked.current === 'x') {
+      snap(clamp(startOffset.current + (e.clientX - startX.current)));
+    }
     draggingRef.current = false;
     setDragging(false);
-    if (wasHorizontal) {
-      commitOrSnap(offsetRef.current);
-    }
+    pointerId.current = null;
     axisLocked.current = null;
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
   };
 
   return (
@@ -121,42 +97,35 @@ export function SwipeableActivityRow({
       <div className="absolute inset-0 flex">
         <button
           type="button"
-          className="flex w-[88px] flex-col items-center justify-center gap-1 bg-ink-secondary text-white"
+          className="flex w-[88px] flex-col items-center justify-center gap-1 bg-info text-xs font-bold text-white"
           onClick={() => {
             setLiveOffset(0);
-            onHide();
+            onEdit();
           }}
-          aria-label={t('app.hide')}
         >
-          <EyeOff className="h-4 w-4" />
-          <span className="text-[11px] font-semibold">{t('app.hide')}</span>
+          <Pencil className="h-4 w-4" />
+          {t('app.edit')}
         </button>
         <div className="flex-1" />
         <button
           type="button"
-          className="flex w-[88px] flex-col items-center justify-center gap-1 bg-expense text-white"
+          className="flex w-[88px] flex-col items-center justify-center gap-1 bg-ink-secondary text-xs font-bold text-white"
           onClick={() => {
             setLiveOffset(0);
-            onDelete();
+            onArchive();
           }}
-          aria-label={t('app.delete')}
         >
-          <Trash2 className="h-4 w-4" />
-          <span className="text-[11px] font-semibold">{t('app.delete')}</span>
+          <Archive className="h-4 w-4" />
+          {t('app.archive')}
         </button>
       </div>
-
       <div
-        role="group"
-        className={cn(
-          'relative z-10 touch-pan-y bg-surface select-none',
-          !dragging && 'transition-transform duration-[var(--cm-motion-medium)] ease-out',
-        )}
-        style={{ transform: `translate3d(${offset}px, 0, 0)` }}
+        className={cn('relative bg-surface touch-pan-y', dragging && 'select-none')}
+        style={{ transform: `translateX(${offset}px)`, transition: dragging ? 'none' : 'transform 160ms ease' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
         {children}
       </div>

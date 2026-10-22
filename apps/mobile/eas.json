@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 12.0.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "apk": {
@@ -26,6 +26,17 @@
     "ios": {
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://penny.phronexus-ai.com/cm-api",
+        "EXPO_PUBLIC_WEB_URL": "https://penny.phronexus-ai.com"
+      }
+    },
+    "ios-device": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "resourceClass": "m-medium"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://penny.phronexus-ai.com/cm-api",

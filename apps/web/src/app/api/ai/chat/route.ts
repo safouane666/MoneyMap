@@ -116,11 +116,15 @@ export async function POST(req: Request) {
         ? body.sessionId.trim().slice(0, 80)
         : undefined;
     const locale = typeof body.locale === 'string' ? body.locale.slice(0, 16) : undefined;
+    // Locale rides on the ledger context so Penny's system prompt matches the UI language.
+    if (locale) {
+      (body.context as AiLedgerContext).locale = locale;
+    }
 
     const messages = body.messages
       .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
       .map((m) => ({ role: m.role, content: m.content.slice(0, CONTENT_MAX) }))
-      .slice(-12);
+      .slice(-8);
 
     if (messages[messages.length - 1]?.role !== 'user') {
       return NextResponse.json({ error: 'last message must be from user' }, { status: 400 });
@@ -157,6 +161,7 @@ export async function POST(req: Request) {
             status: 'ok',
             flags: {
               actionCount: result.actions?.length ?? 0,
+              actionTypes: (result.actions ?? []).map((a) => a.type).slice(0, 12),
             },
           },
         ],

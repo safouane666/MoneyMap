@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { SetupShell } from '../../src/components/SetupShell';
 import { PrimaryButton, SecondaryButton } from '../../src/components/ui';
+import { useSetupLocale } from '../../src/lib/setup-locale';
 import { markSetupStep } from '../../src/lib/setup-session';
+import { prevSetupRoute } from '../../src/lib/setup-steps';
 import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function ReadyScreen() {
   const router = useRouter();
+  const { t } = useSetupLocale();
   const [showCta, setShowCta] = useState(false);
+  const backTo = prevSetupRoute('ready');
 
   useEffect(() => {
     void markSetupStep('ready');
@@ -19,21 +23,29 @@ export default function ReadyScreen() {
   return (
     <SetupShell stepId="ready">
       <View style={styles.card}>
-        <Text style={styles.eyebrow}>You&apos;re set</Text>
-        <Text style={styles.title}>Ready when you are</Text>
-        <Text style={styles.body}>
-          Create an account to sync across devices, sign in if you already have one, or continue
-          without an account.
-        </Text>
+        <Text style={styles.eyebrow}>{t('setup.celebrationEyebrow')}</Text>
+        <Text style={styles.title}>{t('setup.readyTitle')}</Text>
+        <Text style={styles.body}>{t('setup.readyBody')}</Text>
         {showCta ? (
           <View style={styles.actions}>
-            <PrimaryButton label="Get started" onPress={() => router.push('/auth/sign-up')} />
+            <View style={styles.navRow}>
+              {backTo ? (
+                <SecondaryButton
+                  label={t('setup.features.prev')}
+                  onPress={() => router.replace(backTo as Href)}
+                />
+              ) : null}
+              <PrimaryButton
+                label={t('setup.welcome.cta')}
+                onPress={() => router.push('/auth/sign-up')}
+              />
+            </View>
             <SecondaryButton
-              label="Sign in"
+              label={t('nav.signIn')}
               onPress={() => router.push('/auth/sign-in?skip=1')}
             />
             <SecondaryButton
-              label="Continue without an account"
+              label={t('setup.skipAccount')}
               onPress={() => router.replace('/(tabs)/home')}
             />
           </View>
@@ -67,4 +79,10 @@ const styles = StyleSheet.create({
   },
   body: { marginTop: space[3], fontSize: 15, lineHeight: 22, color: colors.inkSecondary },
   actions: { marginTop: space[6], gap: space[3] },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: space[3],
+  },
 });

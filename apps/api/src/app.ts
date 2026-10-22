@@ -26,6 +26,8 @@ import {
   evaluateGoalPace,
   clampDayOfMonth,
   computeNextDueAt,
+  computeRecurringEndsAt,
+  normalizeRecurringDuration,
   type Goal,
   type PlanId,
   type SpaceRole,
@@ -111,6 +113,55 @@ export function createApp() {
       googleEnabled: Boolean(config.googleClientId && config.googleClientSecret),
     }),
   );
+
+  /** Public Play Store / privacy deletion request (no auth — verify before deleting). */
+  app.post('/public/deletion-request', async (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+    if (!rateLimit(`deletion:${ip}`, 5, 60 * 60_000)) {
+      return c.json({ error: 'Too many requests. Try again later.' }, 429);
+    }
+    let body: { email?: string; confirm?: boolean } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON' }, 400);
+    }
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    if (!email.includes('@') || email.length > 320) {
+      return c.json({ error: 'Valid email required' }, 400);
+    }
+    if (body.confirm !== true) {
+      return c.json({ error: 'Confirmation required' }, 400);
+    }
+
+    const profile = (
+      await db().select().from(user).where(eq(user.email, email)).limit(1)
+    )[0];
+
+    await db().insert(auditLog).values({
+      id: createId('aud'),
+      spaceId: null,
+      actorId: profile?.id ?? null,
+      action: 'deletion_request',
+      entityType: 'user',
+      entityId: profile?.id ?? null,
+      beforeSummary: email,
+      afterSummary: `requested via /delete-data from ${ip}`,
+    });
+
+    console.info('[deletion-request]', {
+      email,
+      matched: Boolean(profile),
+      userId: profile?.id ?? null,
+    });
+
+    // Same response whether or not the email exists (no account enumeration).
+    return c.json({
+      ok: true,
+      message:
+        'Request received. We will verify ownership and delete account and ledger data within 30 days.',
+    });
+  });
 
   /**
    * Native Google OAuth start (system browser).
@@ -609,6 +660,7 @@ export function createApp() {
     const userId = c.get('userId');
     const spaceId = c.req.param('spaceId');
     const membership = await requireMembership(userId, spaceId);
+    const space = (await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1))[0];
     const from = c.req.query('from');
     const to = c.req.query('to');
     const status = c.req.query('status');
@@ -632,6 +684,21 @@ export function createApp() {
       userId,
       rows as TxnRow[],
     );
+    // Heal legacy rows posted with a stale currency (e.g. USD millimes shown as $2,000).
+    if (space?.currency) {
+      const mismatched = visible.filter((r) => r.currency !== space.currency);
+      if (mismatched.length > 0) {
+        void Promise.all(
+          mismatched.map((r) =>
+            db()
+              .update(transactions)
+              .set({ currency: space.currency })
+              .where(eq(transactions.id, r.id)),
+          ),
+        ).catch(() => undefined);
+      }
+      return c.json(visible.map((r) => ({ ...r, currency: space.currency })));
+    }
     return c.json(visible);
   });
 
@@ -977,6 +1044,7 @@ export function createApp() {
     const userId = c.get('userId');
     const spaceId = c.req.param('spaceId');
     await requireMembership(userId, spaceId);
+    const space = (await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1))[0];
     const includeInactive = c.req.query('includeInactive') === '1';
     const conditions = [eq(scheduledExpenses.spaceId, spaceId)];
     if (!includeInactive) conditions.push(eq(scheduledExpenses.active, true));
@@ -985,6 +1053,20 @@ export function createApp() {
       .from(scheduledExpenses)
       .where(and(...conditions))
       .orderBy(desc(scheduledExpenses.createdAt));
+    if (space?.currency) {
+      const mismatched = rows.filter((r) => r.currency !== space.currency);
+      if (mismatched.length > 0) {
+        void Promise.all(
+          mismatched.map((r) =>
+            db()
+              .update(scheduledExpenses)
+              .set({ currency: space.currency })
+              .where(eq(scheduledExpenses.id, r.id)),
+          ),
+        ).catch(() => undefined);
+      }
+      return c.json(rows.map((r) => ({ ...r, currency: space.currency })));
+    }
     return c.json(rows);
   });
 
@@ -999,6 +1081,8 @@ export function createApp() {
       kind: RecurringKind;
       dayOfMonth: number;
       notifyHoursBefore?: number;
+      durationUnit?: string;
+      durationCount?: number | null;
     }>();
 
     if (!body.name || typeof body.name !== 'string' || !body.name.trim()) {
@@ -1014,6 +1098,8 @@ export function createApp() {
       return c.json({ error: 'dayOfMonth must be 1..28' }, 400);
     }
     const dayOfMonth = clampDayOfMonth(body.dayOfMonth);
+    const duration = normalizeRecurringDuration(body.durationUnit, body.durationCount);
+    if (duration.ok === false) return c.json({ error: duration.error }, 400);
 
     const spaceRow = (
       await db().select().from(spaces).where(eq(spaces.id, spaceId)).limit(1)
@@ -1038,6 +1124,14 @@ export function createApp() {
       kind: body.kind,
       dayOfMonth,
       nextDueAt,
+      durationUnit: duration.value.durationUnit,
+      durationCount: duration.value.durationCount,
+      endsAt: computeRecurringEndsAt(
+        nextDueAt,
+        dayOfMonth,
+        duration.value.durationUnit,
+        duration.value.durationCount,
+      ),
       active: true,
       notifyHoursBefore:
         body.notifyHoursBefore !== undefined && Number.isFinite(body.notifyHoursBefore)
@@ -1086,6 +1180,8 @@ export function createApp() {
       dayOfMonth?: number;
       active?: boolean;
       notifyHoursBefore?: number;
+      durationUnit?: string;
+      durationCount?: number | null;
     }>();
 
     const patch: Partial<typeof scheduledExpenses.$inferInsert> = {};
@@ -1124,6 +1220,30 @@ export function createApp() {
         return c.json({ error: 'notifyHoursBefore must be >= 0' }, 400);
       }
       patch.notifyHoursBefore = Math.trunc(body.notifyHoursBefore);
+    }
+
+    // Duration: recompute endsAt from the (possibly new) next due date whenever
+    // the duration or day-of-month changes.
+    if (
+      body.durationUnit !== undefined ||
+      body.durationCount !== undefined ||
+      body.dayOfMonth !== undefined
+    ) {
+      const unitInput = body.durationUnit ?? row.durationUnit;
+      const countInput =
+        body.durationCount !== undefined ? body.durationCount : row.durationCount;
+      const duration = normalizeRecurringDuration(unitInput, countInput);
+      if (duration.ok === false) return c.json({ error: duration.error }, 400);
+      const effectiveDay = patch.dayOfMonth ?? row.dayOfMonth;
+      const baseDue = patch.nextDueAt ?? row.nextDueAt ?? computeNextDueAt(effectiveDay);
+      patch.durationUnit = duration.value.durationUnit;
+      patch.durationCount = duration.value.durationCount;
+      patch.endsAt = computeRecurringEndsAt(
+        baseDue,
+        effectiveDay,
+        duration.value.durationUnit,
+        duration.value.durationCount,
+      );
     }
 
     await db()

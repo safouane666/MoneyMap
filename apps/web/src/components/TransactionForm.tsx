@@ -99,7 +99,7 @@ export function TransactionForm({ onSaved }: { onSaved?: () => void }) {
   };
 
   return (
-    <div className="flex max-h-[min(88dvh,720px)] flex-col gap-5 overflow-y-auto pb-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-2">
       <div
         className={cn(
           'rounded-[var(--cm-radius-feature)] p-4 transition-colors duration-[var(--cm-motion-medium)]',

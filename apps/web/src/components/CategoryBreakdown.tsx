@@ -31,7 +31,16 @@ export function CategoryBreakdown({ items, currency, locale = 'en' }: CategoryBr
       <div className="mx-auto h-40 w-40" role="img" aria-label="Category breakdown chart">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius={42} outerRadius={70} strokeWidth={0}>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={42}
+              outerRadius={70}
+              strokeWidth={0}
+              isAnimationActive
+              animationDuration={500}
+            >
               {data.map((_, index) => (
                 <Cell key={index} fill={COLORS[index % COLORS.length]} />
               ))}

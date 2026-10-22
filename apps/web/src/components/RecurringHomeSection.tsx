@@ -8,6 +8,7 @@ import {
   formatMinorUnits,
   parseDisplayAmount,
   type CurrencyCode,
+  type RecurringDurationUnit,
 } from '@clear-money/domain';
 import type { SetupLanguage } from '@/lib/setup-session';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,8 @@ import { useLedger, type RecurringItem } from '@/lib/ledger';
 import { getSpaceRecurring } from '@/lib/demo-state';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/components/Toast';
+
+const DURATION_UNITS: RecurringDurationUnit[] = ['forever', 'months', 'years'];
 
 function isDueWithinHours(nextDueAt: string | null, hours: number): boolean {
   if (!nextDueAt) return false;
@@ -56,6 +59,8 @@ function RecurringFormDialog({
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState('1');
+  const [durationUnit, setDurationUnit] = useState<RecurringDurationUnit>('forever');
+  const [durationCount, setDurationCount] = useState('12');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,10 +71,14 @@ function RecurringFormDialog({
       const decimals = currencyDecimalPlaces(currency as CurrencyCode);
       setAmount(String(editing.amountMinor / 10 ** decimals));
       setDay(String(editing.dayOfMonth));
+      setDurationUnit(editing.durationUnit ?? 'forever');
+      setDurationCount(String(editing.durationCount ?? 12));
     } else {
       setName('');
       setAmount('');
       setDay('1');
+      setDurationUnit('forever');
+      setDurationCount('12');
     }
     setError(null);
   }, [open, editing, currency]);
@@ -96,12 +105,21 @@ function RecurringFormDialog({
       }
       const trimmed = name.trim();
       if (!trimmed) throw new ApiError(t('recurring.invalidName'), 400);
+      let count: number | null = null;
+      if (durationUnit !== 'forever') {
+        count = Number(durationCount);
+        if (!Number.isInteger(count) || count < 1) {
+          throw new ApiError(t('recurring.invalidDuration'), 400);
+        }
+      }
       if (editing) {
         await updateRecurring(editing.id, {
           name: trimmed,
           amountMinor,
           dayOfMonth,
           kind,
+          durationUnit,
+          durationCount: count,
         });
       } else {
         await createRecurring({
@@ -109,6 +127,8 @@ function RecurringFormDialog({
           amountMinor,
           kind,
           dayOfMonth,
+          durationUnit,
+          durationCount: count,
         });
       }
       onSaved();
@@ -156,6 +176,37 @@ function RecurringFormDialog({
               onChange={(e) => setDay(e.target.value)}
             />
             <p className="text-xs text-ink-muted">{t('recurring.dayHint')}</p>
+          </div>
+          <div className="space-y-2">
+            <Label>{t('recurring.duration')}</Label>
+            <div className="flex gap-2" role="group" aria-label={t('recurring.duration')}>
+              {DURATION_UNITS.map((unit) => (
+                <Button
+                  key={unit}
+                  type="button"
+                  size="sm"
+                  variant={durationUnit === unit ? 'default' : 'outline'}
+                  aria-pressed={durationUnit === unit}
+                  onClick={() => setDurationUnit(unit)}
+                >
+                  {t(`recurring.${unit}`)}
+                </Button>
+              ))}
+            </div>
+            {durationUnit !== 'forever' ? (
+              <div className="space-y-2">
+                <Label htmlFor="rec-duration-count">{t('recurring.durationCount')}</Label>
+                <Input
+                  id="rec-duration-count"
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={durationCount}
+                  onChange={(e) => setDurationCount(e.target.value)}
+                />
+              </div>
+            ) : null}
           </div>
           {error ? <p className="text-sm text-expense">{error}</p> : null}
           <DialogFooter>
@@ -235,6 +286,15 @@ function RecurringListColumn({
                             locale,
                             Intl.DateTimeFormat().resolvedOptions().timeZone,
                           )}`
+                        : null}
+                      {item.endsAt
+                        ? ` · ${t('recurring.endsOn', {
+                            date: formatDate(
+                              item.endsAt,
+                              locale,
+                              Intl.DateTimeFormat().resolvedOptions().timeZone,
+                            ),
+                          })}`
                         : null}
                     </p>
                     {dueSoon ? (

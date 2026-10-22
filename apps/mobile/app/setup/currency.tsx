@@ -1,18 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { CURRENCY_CATALOG } from '@clear-money/domain';
 import { SetupShell } from '../../src/components/SetupShell';
-import { PrimaryButton } from '../../src/components/ui';
-import { markSetupStep, saveSetupSession } from '../../src/lib/setup-session';
+import { SetupNavRow } from '../../src/components/SetupNavRow';
+import { useSetupLocale } from '../../src/lib/setup-locale';
+import { loadSetupSession, markSetupStep, saveSetupSession } from '../../src/lib/setup-session';
 import { nextSetupRoute } from '../../src/lib/setup-steps';
 import { colors, radius, space } from '../../src/theme/tokens';
 
 export default function CurrencyScreen() {
   const router = useRouter();
+  const { t } = useSetupLocale();
   const [currency, setCurrency] = useState('USD');
   const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    void loadSetupSession().then((s) => setCurrency(s.currency || 'USD'));
+  }, []);
 
   const filtered = useMemo(
     () =>
@@ -26,14 +32,12 @@ export default function CurrencyScreen() {
 
   return (
     <SetupShell stepId="currency">
-      <Text style={styles.title}>Your home currency</Text>
-      <Text style={styles.body}>
-        Amounts and reports will default to this. You can still log other currencies later.
-      </Text>
+      <Text style={styles.title}>{t('setup.currencyTitle')}</Text>
+      <Text style={styles.body}>{t('setup.currencyBody')}</Text>
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Search currencies"
+        placeholder={t('setup.currencySearch')}
         placeholderTextColor={colors.inkMuted}
         style={styles.input}
       />
@@ -55,9 +59,9 @@ export default function CurrencyScreen() {
         })}
       </ScrollView>
       <View style={{ height: space[4] }} />
-      <PrimaryButton
-        label="Continue"
-        onPress={async () => {
+      <SetupNavRow
+        stepId="currency"
+        onContinue={async () => {
           await saveSetupSession({ currency });
           await markSetupStep('currency');
           router.push(nextSetupRoute('currency') as Href);

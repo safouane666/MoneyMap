@@ -2,8 +2,8 @@
   "expo": {
     "name": "Penny",
     "slug": "clear-money",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "1.0.3",
+    "orientation": "default",
     "scheme": "penny",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -28,7 +28,9 @@
         "backgroundColor": "#1EC569"
       },
       "package": "app.penny.mobile",
-      "versionCode": 2,
+      "versionCode": 6,
+      "softwareKeyboardLayoutMode": "resize",
+      "edgeToEdgeEnabled": true,
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
@@ -51,6 +53,30 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#1EC569"
+        }
+      ],
+      [
+        "react-native-edge-to-edge",
+        {
+          "android": {
+            "parentTheme": "Default",
+            "enforceNavigationBarContrast": false
+          }
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0",
+            "enableMinifyInReleaseBuilds": true,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "useLegacyPackaging": false,
+            "extraProguardRules": "-keep class com.swmansion.reanimated.** { *; }\n-keep class com.swmansion.gesturehandler.** { *; }\n-keep class com.facebook.react.turbomodule.** { *; }\n-keep class com.shopify.reactnative.skia.** { *; }\n-keep class com.horcrux.svg.** { *; }\n-dontwarn com.horcrux.svg.**\n"
+          }
         }
       ]
     ],

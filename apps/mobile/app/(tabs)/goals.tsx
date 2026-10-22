@@ -20,6 +20,8 @@ import {
   type Goal,
 } from '@clear-money/domain';
 import { GoalCard } from '../../src/components/GoalCard';
+import { SafeToSpendPanel } from '../../src/components/SafeToSpendPanel';
+import { KeyboardAvoidingWrap } from '../../src/components/KeyboardAvoidingWrap';
 import { t } from '../../src/lib/i18n';
 import {
   createGoal,
@@ -180,35 +182,33 @@ export default function GoalsScreen() {
         {ledger?.plan === 'free' ? (
           <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{t(locale, 'goals.freeCap')}</Text>
         ) : null}
-        <Text style={{ color: colors.inkSecondary, fontSize: 13 }}>{t(locale, 'goals.savedManualNote')}</Text>
+        <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{t(locale, 'goals.savedManualNote')}</Text>
         {error ? <Text style={{ color: colors.expense, fontSize: 13 }}>{error}</Text> : null}
 
-        <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-          <Text style={[styles.cardTitle, { color: colors.ink }]}>{t(locale, 'goals.safeToSpend')}</Text>
-          {safe.status === 'insufficient' ? (
-            <Text style={{ color: colors.inkSecondary, fontSize: 14 }}>{t(locale, 'goals.insufficient')}</Text>
-          ) : (
-            <>
-              <Text style={[styles.safeAmt, { color: colors.ink }]}>
-                {formatMinorUnits(safe.estimateMinor ?? 0, safe.currency, locale)}
-              </Text>
-              {safe.message ? (
-                <Text style={{ color: colors.inkSecondary, fontSize: 13 }}>{safe.message}</Text>
-              ) : null}
-              {safe.breakdown?.map((row) => (
-                <View key={row.label} style={styles.breakRow}>
-                  <Text style={{ color: colors.inkSecondary, fontSize: 13 }}>{row.label}</Text>
-                  <Text style={{ color: colors.ink, fontVariant: ['tabular-nums'], fontSize: 13 }}>
-                    {formatMinorUnits(row.amountMinor, safe.currency, locale)}
-                  </Text>
-                </View>
-              ))}
-            </>
-          )}
-        </View>
+        <SafeToSpendPanel safe={safe} incomeMinor={totals.incomeMinor} locale={locale} />
 
         {goals.length === 0 ? (
-          <Text style={{ color: colors.inkSecondary }}>{t(locale, 'goals.empty')}</Text>
+          <View
+            style={[
+              styles.empty,
+              { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <Text style={{ color: colors.ink, fontSize: 16, fontWeight: '600', textAlign: 'center' }}>
+              {t(locale, 'goals.empty')}
+            </Text>
+            <Text
+              style={{
+                color: colors.inkSecondary,
+                fontSize: 14,
+                textAlign: 'center',
+                marginTop: space[2],
+                lineHeight: 20,
+              }}
+            >
+              {t(locale, 'goals.emptyHint')}
+            </Text>
+          </View>
         ) : (
           goals.map((goal) => (
             <View key={goal.id} style={{ gap: space[2] }}>
@@ -248,7 +248,9 @@ export default function GoalsScreen() {
       </ScrollView>
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+        <KeyboardAvoidingWrap style={styles.backdrop} keyboardVerticalOffset={24}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} />
+        <View style={styles.modalCenter} pointerEvents="box-none">
           <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
             <Text style={[styles.sheetTitle, { color: colors.ink }]}>{t(locale, 'goals.createTitle')}</Text>
             <TextInput
@@ -295,11 +297,14 @@ export default function GoalsScreen() {
               <Text style={styles.ctaText}>{busy ? t(locale, 'goals.creating') : t(locale, 'goals.create')}</Text>
             </Pressable>
           </Pressable>
-        </Pressable>
+        </View>
+        </KeyboardAvoidingWrap>
       </Modal>
 
       <Modal visible={Boolean(progressFor)} transparent animationType="fade" onRequestClose={() => setProgressFor(null)}>
-        <Pressable style={styles.backdrop} onPress={() => setProgressFor(null)}>
+        <KeyboardAvoidingWrap style={styles.backdrop} keyboardVerticalOffset={24}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setProgressFor(null)} />
+        <View style={styles.modalCenter} pointerEvents="box-none">
           <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]} onPress={(e) => e.stopPropagation()}>
             <Text style={[styles.sheetTitle, { color: colors.ink }]}>{t(locale, 'goals.addProgress')}</Text>
             <TextInput
@@ -319,7 +324,8 @@ export default function GoalsScreen() {
               <Text style={styles.ctaText}>{t(locale, 'txn.save')}</Text>
             </Pressable>
           </Pressable>
-        </Pressable>
+        </View>
+        </KeyboardAvoidingWrap>
       </Modal>
     </View>
   );
@@ -332,13 +338,17 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '600', letterSpacing: -0.3, flex: 1 },
   cta: { minHeight: 40, borderRadius: radius.control, paddingHorizontal: space[3], justifyContent: 'center', alignItems: 'center' },
   ctaText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  card: { borderRadius: radius.card, borderWidth: 1, padding: space[5], gap: space[2] },
-  cardTitle: { fontSize: 16, fontWeight: '600' },
-  safeAmt: { fontSize: 24, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  breakRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space[4] },
+  empty: {
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    paddingVertical: space[8],
+    paddingHorizontal: space[6],
+  },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space[3], alignItems: 'center' },
   outline: { minHeight: 36, borderRadius: radius.control, borderWidth: 1, paddingHorizontal: space[3], justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: space[6] },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalCenter: { flex: 1, justifyContent: 'center', padding: space[6] },
   sheet: { borderRadius: radius.card, padding: space[5], gap: space[3] },
   sheetTitle: { fontSize: 18, fontWeight: '700' },
   input: {

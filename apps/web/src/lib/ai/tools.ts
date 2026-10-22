@@ -6,11 +6,22 @@ import {
   formatCategoryChip,
   matchDefaultCategoryHint,
   monthlyTargetMinor,
+  normalizeRecurringDuration,
   parseDisplayAmount,
+  reportSnapshot,
   stripCategoryEmoji,
   type CurrencyCode,
+  type LedgerTransaction,
+  type ReportPeriod,
 } from '@clear-money/domain';
-import type { AiAction, AiLedgerContext, AiSuggestion } from './types';
+import {
+  AI_CONTEXT_TXN_LIMIT,
+  type AiAction,
+  type AiChartKind,
+  type AiChartPoint,
+  type AiLedgerContext,
+  type AiSuggestion,
+} from './types';
 
 const EXPENSE_DEFAULTS: AiSuggestion[] = DEFAULT_EXPENSE_CATEGORIES.map((c) => ({
   label: formatCategoryChip(c.name, c.stableKey),
@@ -332,13 +343,25 @@ export const AI_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'get_report',
-      description: 'Summarize the current space totals and recent activity for the user.',
+      description:
+        'REQUIRED for any question about spending, income, categories, trends, totals, or "where did my money go". Returns real period totals plus structured series (top categories, income/expense trend, spending by hour) and shows a chart in the UI. Never answer such questions from memory or guess numbers.',
       parameters: {
         type: 'object',
         properties: {
           focus: {
             type: 'string',
-            description: 'Optional focus, e.g. expenses, income, net, categories',
+            description: 'Optional focus, e.g. expenses, income, net, categories, trend, hours',
+          },
+          period: {
+            type: 'string',
+            enum: ['thisWeek', 'thisMonth', 'lastMonth', 'last3Months', 'thisYear', 'allTime'],
+            description: 'Report window (default thisMonth)',
+          },
+          chart: {
+            type: 'string',
+            enum: ['auto', 'category', 'trend', 'hours', 'none'],
+            description:
+              'Chart to show: category = top spending categories, trend = income vs expense over time, hours = spending by hour of day. Default auto picks from focus.',
           },
         },
       },
@@ -450,7 +473,7 @@ export const AI_TOOLS = [
     function: {
       name: 'create_recurring',
       description:
-        'Create a monthly recurring income (salary) or expense (subscription/bill). dayOfMonth is 1–28.',
+        'Create a monthly recurring income (salary) or expense (subscription/loan/bill). dayOfMonth is 1–28. Optional duration: durationUnit forever (default) | months | years with durationCount (e.g. a 24-month loan).',
       parameters: {
         type: 'object',
         properties: {
@@ -458,6 +481,15 @@ export const AI_TOOLS = [
           amount: { type: 'number', description: 'Major units in space currency' },
           kind: { type: 'string', enum: ['income', 'expense'] },
           dayOfMonth: { type: 'number', description: 'Day of month 1–28 (default 1)' },
+          durationUnit: {
+            type: 'string',
+            enum: ['forever', 'months', 'years'],
+            description: 'How long it repeats (default forever)',
+          },
+          durationCount: {
+            type: 'number',
+            description: 'Number of months/years; required unless durationUnit is forever',
+          },
         },
         required: ['name', 'amount', 'kind'],
       },
@@ -478,6 +510,11 @@ export const AI_TOOLS = [
           kind: { type: 'string', enum: ['income', 'expense'] },
           dayOfMonth: { type: 'number' },
           active: { type: 'boolean' },
+          durationUnit: { type: 'string', enum: ['forever', 'months', 'years'] },
+          durationCount: {
+            type: 'number',
+            description: 'Number of months/years; required unless durationUnit is forever',
+          },
         },
       },
     },
@@ -871,6 +908,218 @@ function resolveCategory(
     };
   }
   return { ok: true, category: matches[0]! };
+}
+
+const REPORT_PERIODS: readonly ReportPeriod[] = [
+  'thisWeek',
+  'thisMonth',
+  'lastMonth',
+  'last3Months',
+  'thisYear',
+  'allTime',
+];
+
+const PERIOD_LABEL: Record<ReportPeriod, string> = {
+  thisWeek: 'this week',
+  thisMonth: 'this month',
+  lastMonth: 'last month',
+  last3Months: 'last 3 months',
+  thisYear: 'this year',
+  allTime: 'all time',
+};
+
+function uiLocale(context: AiLedgerContext): 'en' | 'fr' | 'ar' {
+  const code = (context.locale || 'en').toLowerCase().slice(0, 2);
+  return code === 'fr' || code === 'ar' ? code : 'en';
+}
+
+function otherCategoryLabel(locale: 'en' | 'fr' | 'ar'): string {
+  return locale === 'fr' ? 'Autre' : locale === 'ar' ? 'أخرى' : 'Other';
+}
+
+function contextTransactions(context: AiLedgerContext): LedgerTransaction[] {
+  return (Array.isArray(context.txns) ? context.txns : [])
+    .slice(0, AI_CONTEXT_TXN_LIMIT)
+    .filter(
+      (t) =>
+        (t.type === 'income' || t.type === 'expense') &&
+        Number.isFinite(t.amountMinor) &&
+        t.amountMinor > 0 &&
+        Number.isFinite(Date.parse(t.occurredAt)),
+    )
+    .map((t, i) => ({
+      id: `ctx_${i}`,
+      spaceId: context.spaceId,
+      type: t.type,
+      amountMinor: t.amountMinor,
+      currency: context.currency,
+      categoryId: t.categoryId,
+      description: null,
+      occurredAt: t.occurredAt,
+      createdAt: t.occurredAt,
+      createdBy: '',
+      source: 'manual' as const,
+      status: 'confirmed' as const,
+    }));
+}
+
+function resolveChartKind(chartArg: string | undefined, focus: string): AiChartKind | null {
+  if (chartArg === 'none') return null;
+  if (chartArg === 'category' || chartArg === 'trend' || chartArg === 'hours') return chartArg;
+  const f = focus.toLowerCase();
+  if (/\b(hours?|time of day|heures?)\b|ساعة/.test(f)) return 'hours';
+  if (/\b(trend|over time|income|net|tendance)\b|اتجاه/.test(f)) return 'trend';
+  return 'category';
+}
+
+function trendLabel(isoDate: string, period: ReportPeriod, locale: string): string {
+  const d = new Date(`${isoDate.slice(0, 10)}T12:00:00`);
+  if (!Number.isFinite(d.getTime())) return isoDate;
+  const monthly = period === 'last3Months' || period === 'thisYear' || period === 'allTime';
+  try {
+    return monthly
+      ? d.toLocaleDateString(locale, { month: 'short', year: '2-digit' })
+      : d.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+  } catch {
+    return isoDate.slice(0, 10);
+  }
+}
+
+function runReport(
+  context: AiLedgerContext,
+  args: Record<string, unknown>,
+  actions: AiAction[],
+): { ok: true; result: Record<string, unknown> } {
+  const focus = asString(args.focus) ?? 'overview';
+  const periodRaw = asString(args.period) as ReportPeriod | undefined;
+  const period: ReportPeriod =
+    periodRaw && REPORT_PERIODS.includes(periodRaw) ? periodRaw : 'thisMonth';
+  const locale = uiLocale(context);
+  const currency = context.currency;
+  const txns = contextTransactions(context);
+  const hasSeries = txns.length > 0;
+
+  const nameFor = (categoryId: string | null) => {
+    const name = categoryId ? context.categories.find((c) => c.id === categoryId)?.name : null;
+    return (name && (stripCategoryEmoji(name).trim() || name)) || otherCategoryLabel(locale);
+  };
+  const major = (minor: number) => majorFromMinor(minor, currency);
+
+  const snap = hasSeries
+    ? reportSnapshot(txns, currency, period, nameFor, { timeZone: context.timeZone })
+    : null;
+  const totals = snap?.totals ?? context.totals;
+
+  const lines = [
+    `Space: ${context.spaceName} (${currency})${snap ? ` · ${PERIOD_LABEL[period]}` : ''}`,
+    `Income: ${formatMinor(totals.incomeMinor, currency)}`,
+    `Expenses: ${formatMinor(totals.expenseMinor, currency)}`,
+    `Net: ${formatMinor(totals.netMinor, currency)}`,
+  ];
+  if (snap?.topCategory) {
+    lines.push(
+      `Top category: ${snap.topCategory.name} ${formatMinor(snap.topCategory.amountMinor, currency)} (${Math.round(snap.topCategory.share * 100)}%)`,
+    );
+  }
+  lines.push(
+    context.recent.length
+      ? `Recent: ${context.recent
+          .slice(0, 5)
+          .map(
+            (r) =>
+              `${r.id} ${r.type} ${formatMinor(r.amountMinor, currency)}${r.category ? ` · ${r.category}` : ''}${r.description ? ` (${r.description})` : ''}`,
+          )
+          .join('; ')}`
+      : 'Recent: none yet',
+  );
+  const body = lines.join('\n');
+
+  actions.push({
+    type: 'report',
+    // Long focus strings are raw user text from the deterministic fallback — keep the title tidy.
+    title: focus === 'overview' || focus.length > 24 ? 'Space summary' : `Focus: ${focus}`,
+    body,
+  });
+
+  if (!snap) {
+    return {
+      ok: true,
+      result: {
+        focus,
+        summary: body,
+        seriesAvailable: false,
+        note: 'No transaction series available — only overall totals and recent entries.',
+      },
+    };
+  }
+
+  // Structured series for the model + chart payload for the UI.
+  const categories = snap.categories.map((c) => ({
+    name: c.name,
+    amount: major(c.amountMinor),
+    sharePct: Math.round(c.share * 100),
+  }));
+  const trend = snap.trend.slice(-12).map((p) => ({
+    date: p.date,
+    income: major(p.incomeMinor),
+    expense: major(p.expenseMinor),
+  }));
+  const peakHours = [...snap.hours]
+    .filter((h) => h.amountMinor > 0)
+    .sort((a, b) => b.amountMinor - a.amountMinor)
+    .slice(0, 3)
+    .map((h) => ({ hour: h.hour, amount: major(h.amountMinor), count: h.count }));
+
+  const chart = resolveChartKind(asString(args.chart), focus);
+  let points: AiChartPoint[] = [];
+  if (chart === 'category') {
+    const top = snap.categories.slice(0, 6);
+    const rest = snap.categories.slice(6).reduce((sum, c) => sum + c.amountMinor, 0);
+    points = top.map((c) => ({ label: c.name, valueMinor: c.amountMinor }));
+    if (rest > 0) points.push({ label: otherCategoryLabel(locale), valueMinor: rest });
+  } else if (chart === 'trend') {
+    points = snap.trend.slice(-14).map((p) => ({
+      label: trendLabel(p.date, period, locale),
+      valueMinor: p.expenseMinor,
+      incomeMinor: p.incomeMinor,
+    }));
+  } else if (chart === 'hours') {
+    points = snap.hours
+      .filter((h) => h.amountMinor > 0)
+      .map((h) => ({ label: String(h.hour).padStart(2, '0'), valueMinor: h.amountMinor }));
+  }
+  const hasData = points.some((p) => p.valueMinor > 0 || (p.incomeMinor ?? 0) > 0);
+  if (chart && hasData) {
+    actions.push({ type: 'show_chart', chart, currency, points });
+  }
+
+  return {
+    ok: true,
+    result: {
+      focus,
+      period,
+      currency,
+      seriesAvailable: true,
+      totals: {
+        income: major(totals.incomeMinor),
+        expense: major(totals.expenseMinor),
+        net: major(totals.netMinor),
+      },
+      avgDailyExpense: major(snap.avgDailyExpenseMinor),
+      topCategory: snap.topCategory
+        ? {
+            name: snap.topCategory.name,
+            amount: major(snap.topCategory.amountMinor),
+            sharePct: Math.round(snap.topCategory.share * 100),
+          }
+        : null,
+      categories: categories.slice(0, 6),
+      trend,
+      peakHours,
+      chartShown: chart && hasData ? chart : null,
+      summary: body,
+    },
+  };
 }
 
 export async function runAiTool(
@@ -1305,6 +1554,8 @@ export async function runAiTool(
             kind: r.kind,
             dayOfMonth: r.dayOfMonth,
             active: r.active,
+            durationUnit: r.durationUnit ?? 'forever',
+            durationCount: r.durationCount ?? null,
           })),
         },
       };
@@ -1317,16 +1568,31 @@ export async function runAiTool(
       if (!nameValue) return { ok: false, error: 'name is required' };
       if (amount === null || amount <= 0) return { ok: false, error: 'amount must be positive' };
       const dayOfMonth = Math.min(28, Math.max(1, Math.floor(dayRaw)));
+      const duration = normalizeRecurringDuration(
+        asString(args.durationUnit) || undefined,
+        asNumber(args.durationCount),
+      );
+      if (duration.ok === false) return { ok: false, error: duration.error };
       actions.push({
         type: 'create_recurring',
         name: nameValue,
         amountMajor: amount,
         kind,
         dayOfMonth,
+        durationUnit: duration.value.durationUnit,
+        durationCount: duration.value.durationCount,
       });
       return {
         ok: true,
-        result: { queued: true, name: nameValue, amount, kind, dayOfMonth },
+        result: {
+          queued: true,
+          name: nameValue,
+          amount,
+          kind,
+          dayOfMonth,
+          durationUnit: duration.value.durationUnit,
+          durationCount: duration.value.durationCount,
+        },
       };
     }
     case 'update_recurring': {
@@ -1339,12 +1605,28 @@ export async function runAiTool(
         kindRaw === 'income' || kindRaw === 'expense' ? kindRaw : undefined;
       const dayRaw = asNumber(args.dayOfMonth);
       const active = typeof args.active === 'boolean' ? args.active : undefined;
+      const durationUnitRaw = asString(args.durationUnit);
+      const durationCountRaw = asNumber(args.durationCount);
+      let durationUnit: 'forever' | 'months' | 'years' | undefined;
+      let durationCount: number | null | undefined;
+      if (durationUnitRaw !== undefined || durationCountRaw !== null) {
+        // Fall back to the item's current unit when only the count is given.
+        const current = (context.recurring ?? []).find((r) => r.id === resolved.recurringId);
+        const duration = normalizeRecurringDuration(
+          durationUnitRaw ?? current?.durationUnit ?? 'forever',
+          durationCountRaw ?? (durationUnitRaw ? null : (current?.durationCount ?? null)),
+        );
+        if (duration.ok === false) return { ok: false, error: duration.error };
+        durationUnit = duration.value.durationUnit;
+        durationCount = duration.value.durationCount;
+      }
       if (
         !nameValue &&
         amount == null &&
         !kind &&
         dayRaw == null &&
-        active === undefined
+        active === undefined &&
+        durationUnit === undefined
       ) {
         return { ok: false, error: 'Provide at least one field to update' };
       }
@@ -1357,6 +1639,8 @@ export async function runAiTool(
         dayOfMonth:
           dayRaw == null ? undefined : Math.min(28, Math.max(1, Math.floor(dayRaw))),
         active,
+        durationUnit,
+        durationCount,
       });
       return { ok: true, result: { queued: true, recurringId: resolved.recurringId } };
     }
@@ -1385,15 +1669,18 @@ export async function runAiTool(
       const nameValue = asString(args.name);
       if (!nameValue) return { ok: false, error: 'name is required' };
       const typeRaw = asString(args.type) ?? 'shared';
-      const allowed = new Set([
+      const allowed = [
         'personal',
         'household',
         'shared',
         'project',
         'family',
         'company',
-      ]);
-      const spaceType = allowed.has(typeRaw) ? typeRaw : 'shared';
+      ] as const;
+      type SpaceType = (typeof allowed)[number];
+      const spaceType: SpaceType = (allowed as readonly string[]).includes(typeRaw)
+        ? (typeRaw as SpaceType)
+        : 'shared';
       const currency = asString(args.currency)?.toUpperCase() ?? context.currency;
       actions.push({ type: 'create_space', name: nameValue, spaceType, currency });
       return {
@@ -1446,30 +1733,7 @@ export async function runAiTool(
       return { ok: true, result: { queued: true, email, role } };
     }
     case 'get_report': {
-      const focus = asString(args.focus) ?? 'overview';
-      const body = [
-        `Space: ${context.spaceName} (${context.currency})`,
-        `Income: ${formatMinor(context.totals.incomeMinor, context.currency)}`,
-        `Expenses: ${formatMinor(context.totals.expenseMinor, context.currency)}`,
-        `Net: ${formatMinor(context.totals.netMinor, context.currency)}`,
-        context.recent.length
-          ? `Recent: ${context.recent
-              .slice(0, 5)
-              .map(
-                (r) =>
-                  `${r.id} ${r.type} ${formatMinor(r.amountMinor, context.currency)}${r.category ? ` · ${r.category}` : ''}${r.description ? ` (${r.description})` : ''}`,
-              )
-              .join('; ')}`
-          : 'Recent: none yet',
-      ].join('\n');
-
-      actions.push({
-        type: 'report',
-        title: focus === 'overview' ? 'Space summary' : `Focus: ${focus}`,
-        body,
-      });
-
-      return { ok: true, result: { focus, summary: body } };
+      return runReport(context, args, actions);
     }
     default:
       return { ok: false, error: `Unknown tool: ${name}` };
@@ -1485,77 +1749,58 @@ function safeJson(raw: string): unknown {
 }
 
 export function buildSystemPrompt(context: AiLedgerContext): string {
-  const cats = context.categories
-    .map((c) => `${c.name} (${c.type})`)
-    .slice(0, 40)
-    .join(', ');
+  const locale = (context.locale || 'en').toLowerCase().slice(0, 2);
+  const replyLang =
+    locale === 'fr' ? 'French' : locale === 'ar' ? 'Arabic' : 'English';
 
-  const recentLines = context.recent
-    .slice(0, 6)
+  // Compact snapshot — host models often load with a ~2k context window.
+  const catNames = (context.categories ?? [])
+    .slice(0, 20)
+    .map((c) => c.name)
+    .join(', ');
+  const recentLines = (context.recent ?? [])
+    .slice(0, 5)
     .map(
       (r) =>
-        `- id=${r.id} ${r.type} ${formatMinor(r.amountMinor, context.currency)} · ${r.category ?? 'uncategorized'} · note="${r.description ?? ''}"`,
+        `- ${r.type} ${formatMinor(r.amountMinor, context.currency)}${r.category ? ` · ${r.category}` : ''}${r.description ? ` “${String(r.description).slice(0, 32)}”` : ''}`,
     )
     .join('\n');
-
   const goalLines = (context.goals ?? [])
-    .slice(0, 6)
+    .slice(0, 4)
     .map(
       (g) =>
-        `- id=${g.id} "${g.name}" ${formatMinor(g.savedMinor, context.currency)}/${formatMinor(g.targetMinor, context.currency)} · ${g.durationMonths}mo · ${g.status}${g.paceStatus ? ` · ${g.paceStatus}` : ''}`,
+        `- "${g.name}" ${formatMinor(g.savedMinor, context.currency)}/${formatMinor(g.targetMinor, context.currency)}`,
     )
-    .join('\n');
-
-  const recurringLines = (context.recurring ?? [])
-    .slice(0, 6)
-    .map(
-      (r) =>
-        `- id=${r.id} "${r.name}" ${r.kind} ${formatMinor(r.amountMinor, context.currency)} day ${r.dayOfMonth}${r.active ? '' : ' (paused)'}`,
-    )
-    .join('\n');
-
-  const spaceLines = (context.spaces ?? [])
-    .map((s) => `- id=${s.id} "${s.name}" ${s.currency}${s.id === context.spaceId ? ' (active)' : ''}`)
     .join('\n');
 
   return [
-    'You are Penny — the AI Money Tracker companion: calm, practical, and on the user’s side.',
-    'Always speak in first person as Penny. Never call yourself “the assistant”, “an AI”, or “a chatbot”.',
-    'If asked who you are: you’re Penny, the AI Money Tracker companion who helps with everything in the ledger — spend, income, categories, goals, recurring, spaces, invites, and reports.',
-    'Tone: warm, sharp, lightly funny. Dry humor about money is welcome, but never spam jokes — at most one short quip when it fits.',
-    'Keep answers concise and conversational, like a coach sitting next to the ledger — not a corporate FAQ.',
-    'CRITICAL — anything the user can do in the app, they can ask you to do. Use tools for every ledger mutation. Never pretend you saved/created/deleted/switched something without a tool call.',
-    'Capabilities (always use the matching tool):',
-    '- Spend / income: add_expense, add_income, ask_for_category, convert_currency',
-    '- Categories: create_category, rename_category, delete_category, list_categories',
-    '- Edit entries: find_entries, update_entry (note, category, amount, date), delete_entry, hide_entry',
-    '- Goals: plan_goal, create_goal, list_goals, update_goal (progress/rename/status), delete_goal',
-    '- Recurring salary/bills: list_recurring, create_recurring, update_recurring, delete_recurring',
-    '- Spaces: list_spaces, create_space, switch_space',
-    '- Members: invite_member',
-    '- Insights: get_report',
-    'CRITICAL money entry flow:',
-    `1) Amounts without an explicit foreign currency code are already in ${context.currency}. Do NOT call convert_currency for them.`,
-    `2) Only call convert_currency when the user names a currency code different from ${context.currency}.`,
-    '3) If amount has no category, you MUST call ask_for_category (UI shows chips). Never ask for category in free text only.',
-    '4) If category is already clear from the user wording, call add_expense/add_income with the matching default category name. Default expense categories (short UI labels; use these exact names): Groceries, Food & Drinks, Housing, Bills, Transport, Shopping, Entertainment, Health, Education, Travel, Gifts, Family, Loans & Debts, Other. Map hints like coffee/restaurant→Food & Drinks, rent→Housing, uber/fuel→Transport, pharmacy→Health. If you are unsure, ask_for_category instead of inventing a new category.',
-    '5) When the user asks to create a category, call create_category — custom categories stay private to the active space. Do not only acknowledge in chat.',
-    '5b) Rename with rename_category; remove with delete_category (entries become uncategorized).',
-    '6) Notes are optional. Never ask for a note after saving unless the user already asked to add one. If they say not to ask for notes, stop asking.',
-    '7) Only claim a save after tools actually queued add_expense/add_income. Never invent “logged” without a tool call.',
-    'Savings goals (duration-based): preview with plan_goal, then create_goal after confirm. Log progress with update_goal(savedAmount=…).',
-    'Editing / removing: “change the last note/amount” → update_entry; “delete/undo that spend” → delete_entry; “hide it” → hide_entry.',
-    'Recurring: “my salary is 3000 on the 1st” → create_recurring; pause/delete with update_recurring / delete_recurring.',
-    'Spaces: “create a Family space” → create_space(type=household|shared|family); “switch to Work” → switch_space; “invite alex@…” → invite_member. Space creation is not plan-limited.',
-    'Use tools for ledger facts. Do not invent balances or FX rates.',
-    `Amounts the ledger stores are in ${context.currency} major units.`,
+    // Persona
+    'You are Penny — calm AI money companion inside the MoneyMap app. Speak in first person as Penny only.',
+    'Tone: warm, practical, lightly funny — at most one short quip. 1–3 short sentences, plain text (no tables, no headings). Not clingy or overly affectionate.',
+    'Greetings or small talk: answer in one line and offer to log spend or show a report. No tools.',
+    // Locale
+    `LANGUAGE: Reply entirely in ${replyLang} (app locale "${locale}"), including category names and chart/report wording. Only switch if the user clearly writes in another language. Tool arguments stay in the user's own wording.`,
+    `Currency is ${context.currency} — never assume USD and never write "$" unless ${context.currency} is USD. Amounts without a foreign ISO code (including local shorthand like DT/dnt/dinar for TND) are already in ${context.currency}; only convert_currency when a different ISO code is named.`,
+    // When to use tools
+    'Use tools for every ledger mutation and every number you report. Never say saved/created/deleted/updated/done unless the matching tool was called this turn.',
+    'No category → ask_for_category (chips). Clear category → add_expense/add_income with a default label (Groceries, Food & Drinks, Housing, Bills, Transport, Shopping, Entertainment, Health, Education, Travel, Gifts, Family, Loans & Debts, Other). If the user answers a category question with a short word, reuse the amount from the previous message — do not ask for the amount again.',
+    'Notes optional — do not ask for a note after saving unless the user asked.',
+    'Questions about spending, income, categories, trends, totals, "where did my money go", or time of day → call get_report (set period and chart). Never answer from memory or invent amounts, merchants, goals, or balances; use only tool results and the context below.',
+    'Goal progress → list_goals first. Recurring items → list_recurring first. Unsure which entry/category/goal → find_entries / list_categories / list_goals, then act.',
+    // Visuals
+    'get_report draws the chart in the app: chart=category for "where did it go / biggest spend", trend for "over time / income vs spend", hours for "when do I spend". Do not re-list every number in text — give one insight (top category, peak hour, or net) in 1–2 sentences. Skip charts when the user only wants a single total.',
+    'Do not describe app screens you are unsure of; the tabs are Home, Activity, Goals, Reports.',
+    // Safety
+    'If the message is gibberish, a lone word, or unclear, ask one short clarifying question and call no tools. Never call delete/hide/update tools on unclear input or on short replies like "yes", "ok", "both", "any".',
+    'Delete/hide ONLY when the user clearly says delete/remove/undo/hide AND names what (the last entry, a specific category, goal, or recurring item). Never bulk-delete: if asked to remove several or "all/most" items, list the candidates and ask which one first, then delete one at a time.',
+    'Prefer ids from find_entries/list_* over guessing. If a tool returns needDisambiguation or an error, tell the user and ask — never claim success.',
     'No investment, tax, or lending advice.',
-    `Active space: ${context.spaceName}. Currency: ${context.currency}. Always format money as ${context.currency}, never assume USD.`,
-    `Categories in this space (defaults + customs): ${cats || 'none yet'}.`,
-    `Current totals — income ${formatMinor(context.totals.incomeMinor, context.currency)}, expenses ${formatMinor(context.totals.expenseMinor, context.currency)}, net ${formatMinor(context.totals.netMinor, context.currency)}.`,
-    recentLines ? `Recent entries:\n${recentLines}` : 'Recent entries: none.',
-    goalLines ? `Goals:\n${goalLines}` : 'Goals: none.',
-    recurringLines ? `Recurring:\n${recurringLines}` : 'Recurring: none.',
-    spaceLines ? `Spaces:\n${spaceLines}` : `Spaces: active ${context.spaceName} (${context.spaceId}).`,
-  ].join('\n');
+    `Active space: ${context.spaceName}. Currency: ${context.currency}.`,
+    `Categories: ${catNames || 'none yet'}.`,
+    `Totals — income ${formatMinor(context.totals.incomeMinor, context.currency)}, expenses ${formatMinor(context.totals.expenseMinor, context.currency)}, net ${formatMinor(context.totals.netMinor, context.currency)}.`,
+    recentLines ? `Recent:\n${recentLines}` : 'Recent: none.',
+    goalLines ? `Goals:\n${goalLines}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }

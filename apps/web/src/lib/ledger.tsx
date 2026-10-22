@@ -15,6 +15,7 @@ import {
   createId,
   type Goal,
   type LedgerTransaction,
+  type RecurringDurationUnit,
   type SpaceRole,
 } from '@clear-money/domain';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -85,6 +86,8 @@ interface LedgerContextValue {
     amountMinor: number;
     kind: 'income' | 'expense';
     dayOfMonth: number;
+    durationUnit?: RecurringDurationUnit;
+    durationCount?: number | null;
   }) => Promise<RecurringItem>;
   updateRecurring: (
     id: string,
@@ -94,6 +97,8 @@ interface LedgerContextValue {
       kind?: 'income' | 'expense';
       dayOfMonth?: number;
       active?: boolean;
+      durationUnit?: RecurringDurationUnit;
+      durationCount?: number | null;
     },
   ) => Promise<void>;
   deleteRecurring: (id: string) => Promise<void>;
@@ -240,6 +245,9 @@ function mapRecurring(row: ApiRecurring): RecurringItem {
     nextDueAt: row.nextDueAt,
     active: row.active,
     notifyHoursBefore: row.notifyHoursBefore ?? 0,
+    durationUnit: row.durationUnit ?? 'forever',
+    durationCount: row.durationCount ?? null,
+    endsAt: row.endsAt ?? null,
   };
 }
 
@@ -1167,6 +1175,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       amountMinor: number;
       kind: 'income' | 'expense';
       dayOfMonth: number;
+      durationUnit?: RecurringDurationUnit;
+      durationCount?: number | null;
     }) => {
       if (offlineRef.current) throw new ApiError('Sign in to manage recurring items', 401);
       const spaceId = stateRef.current.activeSpaceId;
@@ -1179,6 +1189,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
           amountMinor: input.amountMinor,
           kind: input.kind,
           dayOfMonth: input.dayOfMonth,
+          durationUnit: input.durationUnit ?? 'forever',
+          durationCount: input.durationCount ?? null,
           currency: space.currency,
         }),
       });
@@ -1202,6 +1214,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         kind?: 'income' | 'expense';
         dayOfMonth?: number;
         active?: boolean;
+        durationUnit?: RecurringDurationUnit;
+        durationCount?: number | null;
       },
     ) => {
       if (offlineRef.current) throw new ApiError('Sign in to manage recurring items', 401);

@@ -33,10 +33,13 @@ export function CategoryBreakdown({
   }
 
   const max = Math.max(...items.map((i) => i.amountMinor), 1);
+  const total = Math.max(1, items.reduce((s, i) => s + i.amountMinor, 0));
 
   return (
     <View style={styles.list}>
-      {items.map((item, index) => (
+      {items.map((item, index) => {
+        const pct = Math.round((item.amountMinor / total) * 100);
+        return (
         <View key={item.name} style={styles.row}>
           <View style={styles.head}>
             <View style={styles.nameRow}>
@@ -47,9 +50,12 @@ export function CategoryBreakdown({
                 {item.name}
               </Text>
             </View>
-            <Text style={[styles.amount, { color: colors.inkSecondary }]}>
-              {formatMinorUnits(item.amountMinor, currency, locale)}
-            </Text>
+            <View style={styles.amountCol}>
+              <Text style={[styles.amount, { color: colors.ink }]}>
+                {formatMinorUnits(item.amountMinor, currency, locale)}
+              </Text>
+              <Text style={[styles.pct, { color: colors.inkMuted }]}>{pct}%</Text>
+            </View>
           </View>
           <View style={[styles.track, { backgroundColor: colors.border }]}>
             <View
@@ -63,7 +69,8 @@ export function CategoryBreakdown({
             />
           </View>
         </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -82,12 +89,14 @@ const styles = StyleSheet.create({
   },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: space[2], flex: 1 },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  name: { flex: 1, fontSize: 14 },
-  amount: { fontSize: 14, fontVariant: ['tabular-nums'] },
+  name: { flex: 1, fontSize: 14, fontWeight: '500' },
+  amountCol: { alignItems: 'flex-end', gap: 2 },
+  amount: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  pct: { fontSize: 11, fontVariant: ['tabular-nums'] },
   track: {
-    height: 6,
+    height: 8,
     borderRadius: 999,
     overflow: 'hidden',
   },
-  fill: { height: 6, borderRadius: 999 },
+  fill: { height: 8, borderRadius: 999 },
 });

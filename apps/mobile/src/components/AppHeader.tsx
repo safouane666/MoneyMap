@@ -45,10 +45,12 @@ export function AppHeader({
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const currency = spaces.find((s) => s.id === activeSpaceId)?.currency;
-  const label = useMemo(
-    () => spaceName?.trim() || spaces.find((s) => s.id === activeSpaceId)?.name || 'Personal',
-    [spaceName, spaces, activeSpaceId],
-  );
+  const label = useMemo(() => {
+    const raw =
+      spaceName?.trim() || spaces.find((s) => s.id === activeSpaceId)?.name || '';
+    if (!raw || /^personal$/i.test(raw)) return t(locale, 'spaces.personal');
+    return raw;
+  }, [spaceName, spaces, activeSpaceId, locale]);
   const accountInitials = useMemo(() => {
     const trimmed = userName?.trim();
     if (!trimmed) return null;
@@ -117,14 +119,16 @@ export function AppHeader({
         ) : null}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Ask Penny"
+          accessibilityLabel={t(locale, 'nav.ai')}
           onPress={() => router.push('/penny')}
           style={[
             styles.pennyBtn,
             { backgroundColor: colors.elevated, borderColor: colors.border },
           ]}
         >
-          <PennyAvatar pose="roll" size="nav" name="Penny" />
+          <View style={styles.pennyClip}>
+            <PennyAvatar pose="idle" size="nav" name="Penny" />
+          </View>
         </Pressable>
       </View>
 
@@ -136,7 +140,9 @@ export function AppHeader({
               { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
           >
-            <Text style={[styles.menuTitle, { color: colors.inkMuted }]}>Spaces</Text>
+            <Text style={[styles.menuTitle, { color: colors.inkMuted }]}>
+              {t(locale, 'nav.spaces')}
+            </Text>
             {spaces.map((space) => {
               const active = space.id === activeSpaceId;
               return (
@@ -207,6 +213,7 @@ const styles = StyleSheet.create({
     gap: space[2],
     flexShrink: 1,
     minWidth: 0,
+    overflow: 'hidden',
   },
   spaceChip: {
     flexDirection: 'row',
@@ -218,6 +225,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: space[3],
     paddingVertical: space[2],
+    overflow: 'hidden',
   },
   spaceLabel: {
     flexShrink: 1,
@@ -231,6 +239,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   right: {
     flexDirection: 'row',
@@ -264,13 +273,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   pennyBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    overflow: 'visible',
+    overflow: 'hidden',
+  },
+  pennyClip: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   backdrop: {
     flex: 1,

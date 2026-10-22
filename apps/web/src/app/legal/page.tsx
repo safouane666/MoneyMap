@@ -25,6 +25,11 @@ const LINKS = [
     body: 'Reach support for product, privacy, or store questions.',
   },
   {
+    href: '/delete-data',
+    title: 'Delete your data',
+    body: 'Request deletion of your Penny account and ledger data.',
+  },
+  {
     href: '/reviews',
     title: 'Ratings & reviews',
     body: 'Community feedback and how to send your own review.',

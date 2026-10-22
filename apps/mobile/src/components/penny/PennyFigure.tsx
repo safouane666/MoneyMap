@@ -35,7 +35,7 @@ export function PennyAvatar({
   size?: 'sm' | 'nav' | 'md' | 'lg';
   name?: string;
 }) {
-  const px = size === 'lg' ? 148 : size === 'md' ? 72 : size === 'nav' ? 48 : 36;
+  const px = size === 'lg' ? 148 : size === 'md' ? 72 : size === 'nav' ? 40 : 36;
   const compact = size === 'sm' || size === 'nav';
   return <PennyFigure pose={pose} size={px} compact={compact} title={name} />;
 }

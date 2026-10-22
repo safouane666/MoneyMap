@@ -12,18 +12,28 @@ export type MoneyDraft = {
   note?: string;
 };
 
+/** Report / chart questions — Penny must call get_report instead of guessing numbers. */
+const REPORT_INTENT =
+  /\b(how much|summary|summarize|report|balance|totals?|breakdown|trend|charts?|graphs?|biggest|top categor(?:y|ies)|which hour|time of day|by hour|where did .{0,30}(?:go|went)|most .{0,12}(?:spend|money)|graphique|tendance|répartition)\b|رسم/i;
+
 /** Rough spend / income / category intents when the model skips tools. */
 export function looksLikeLedgerIntent(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
+  // Gibberish / keyboard mash — never force ledger tools.
+  if (t.length >= 8 && !/[aeiouàâäéèêëïîôùûüœæ]/i.test(t) && /^[\p{L}\s]+$/u.test(t)) {
+    return false;
+  }
   if (
-    /\b(spent|spend|paid|pay|bought|cost|costs|expense|expenses)\b/i.test(t) &&
+    /\b(spent|spend|paid|pay|bought|cost|costs|expense|expenses|dépensé|dépense|payé|acheté)\b/i.test(
+      t,
+    ) &&
     /\d/.test(t)
   ) {
     return true;
   }
   if (
-    /\b(received|receive|earned|earning|income|got paid|salary)\b/i.test(t) &&
+    /\b(received|receive|earned|earning|income|got paid|salary|reçu|gagné|salaire)\b/i.test(t) &&
     /\d/.test(t)
   ) {
     return true;
@@ -31,7 +41,7 @@ export function looksLikeLedgerIntent(text: string): boolean {
   if (/\bcreate\b.+\bcategor(?:y|ies)\b/i.test(t) || /\bnew\b.+\bcategor(?:y|ies)\b/i.test(t)) {
     return true;
   }
-  if (/\b(how much|summary|summarize|report|balance|totals?)\b/i.test(t)) {
+  if (REPORT_INTENT.test(t)) {
     return true;
   }
   if (
@@ -43,11 +53,26 @@ export function looksLikeLedgerIntent(text: string): boolean {
   if (/\b(goal|save for|savings)\b/i.test(t)) return true;
   if (/\b(salary|subscription|recurring|bill)\b/i.test(t)) return true;
   if (/\b(create|switch|new)\b.+\bspace\b/i.test(t) || /\binvite\b.+\b@/i.test(t)) return true;
-  // Affirmations after a pending save ("yes", "add it once more")
-  if (/^(yes|yeah|yep|ok|okay|sure|confirm|do it|save it|add it(?: once more)?)\b/i.test(t)) {
+  // Affirmations only when they clearly confirm a ledger action (not lone "ok"/gibberish).
+  if (
+    /^(yes|yeah|yep|ok|okay|sure|confirm|do it|save it|add it(?: once more)?)\b/i.test(t) &&
+    /\b(save|add|log|confirm|expense|income|category|goal)\b/i.test(t)
+  ) {
     return true;
   }
   return false;
+}
+
+/** True only when the user clearly asks to delete/remove/undo/hide something. */
+export function looksLikeDeleteIntent(text: string): boolean {
+  const t = text.trim();
+  if (!t || t.length < 4) return false;
+  return (
+    /\b(delete|remove|undo|hide|supprime|supprimer|efface|effacer|حذف)\b/i.test(t) &&
+    /\b(expense|income|entry|transaction|spend|last|goal|category|recurring|dépense|revenu|dernier|هدف|مصروف)\b/i.test(
+      t,
+    )
+  );
 }
 
 function parseAmountToken(raw: string): number | null {
@@ -134,10 +159,10 @@ export function parseMoneyUtterance(text: string): MoneyDraft | null {
 
   const spend =
     body.match(
-      /\b(?:i\s+)?(?:also\s+)?(?:just\s+)?(?:spent|spend|paid|pay|bought)\s+(?:about\s+|around\s+)?(?:([$€£])\s*)?([\d.,]+)(?:\s*([A-Za-z]{3})\b)?(?:\s+(?:on|for|at|in)\s+(.+))?/i,
+      /\b(?:i\s+|j['’]ai\s+)?(?:also\s+|aussi\s+)?(?:just\s+|vient\s+de\s+)?(?:spent|spend|paid|pay|bought|dépensé|dépense|payé|acheté)\s+(?:about\s+|around\s+|environ\s+)?(?:([$€£])\s*)?([\d.,]+)(?:\s*([A-Za-z]{3})\b)?(?:\s+(?:on|for|at|in|en|pour|à)\s+(.+))?/i,
     ) ||
     body.match(
-      /\b(?:expense|cost)\s+(?:of\s+)?(?:([$€£])\s*)?([\d.,]+)(?:\s*([A-Za-z]{3})\b)?(?:\s+(?:on|for|at|in)\s+(.+))?/i,
+      /\b(?:expense|cost|dépense)\s+(?:of\s+|de\s+)?(?:([$€£])\s*)?([\d.,]+)(?:\s*([A-Za-z]{3})\b)?(?:\s+(?:on|for|at|in|en|pour)\s+(.+))?/i,
     );
 
   if (spend) {
@@ -304,9 +329,9 @@ export async function applyDeterministicLedgerFallback(
     }
   }
 
-  if (/\b(how much|summary|summarize|report|balance|totals?)\b/i.test(userText)) {
+  if (REPORT_INTENT.test(userText)) {
     if (!actions.some((a) => a.type === 'report')) {
-      await runAiTool('get_report', { focus: 'overview' }, context, actions);
+      await runAiTool('get_report', { focus: userText.slice(0, 80) }, context, actions);
     }
     return actions.some((a) => a.type === 'report');
   }

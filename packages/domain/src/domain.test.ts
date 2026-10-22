@@ -32,6 +32,9 @@ import {
   clampDayOfMonth,
   computeNextDueAt,
   advanceNextDueAt,
+  normalizeRecurringDuration,
+  computeRecurringEndsAt,
+  isPastRecurringEnd,
   wasPostedThisCalendarMonth,
   recurringIdempotencyKey,
   type Goal,
@@ -305,6 +308,38 @@ describe('recurring', () => {
   it('advances due by one month', () => {
     const due = new Date('2026-09-15T12:00:00.000Z');
     expect(advanceNextDueAt(due, 15).toISOString()).toBe('2026-10-15T12:00:00.000Z');
+  });
+
+  it('normalizes recurring duration', () => {
+    expect(normalizeRecurringDuration(undefined, undefined)).toEqual({
+      ok: true,
+      value: { durationUnit: 'forever', durationCount: null },
+    });
+    expect(normalizeRecurringDuration('forever', 5)).toEqual({
+      ok: true,
+      value: { durationUnit: 'forever', durationCount: null },
+    });
+    expect(normalizeRecurringDuration('months', 6)).toEqual({
+      ok: true,
+      value: { durationUnit: 'months', durationCount: 6 },
+    });
+    expect(normalizeRecurringDuration('months', 0).ok).toBe(false);
+    expect(normalizeRecurringDuration('years', 1.5).ok).toBe(false);
+    expect(normalizeRecurringDuration('weeks', 1).ok).toBe(false);
+  });
+
+  it('computes recurring endsAt as the last due date', () => {
+    const first = new Date('2026-10-15T12:00:00.000Z');
+    expect(computeRecurringEndsAt(first, 15, 'forever', null)).toBeNull();
+    expect(computeRecurringEndsAt(first, 15, 'months', 3)?.toISOString()).toBe(
+      '2026-12-15T12:00:00.000Z',
+    );
+    expect(computeRecurringEndsAt(first, 15, 'years', 1)?.toISOString()).toBe(
+      '2027-09-15T12:00:00.000Z',
+    );
+    const ends = computeRecurringEndsAt(first, 15, 'months', 1)!;
+    expect(isPastRecurringEnd(first, ends)).toBe(false);
+    expect(isPastRecurringEnd(advanceNextDueAt(first, 15), ends)).toBe(true);
   });
 
   it('detects same calendar month posts', () => {

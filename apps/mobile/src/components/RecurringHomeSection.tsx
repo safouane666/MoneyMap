@@ -4,6 +4,7 @@ import {
   formatMinorUnits,
   parseDisplayAmount,
   type CurrencyCode,
+  type RecurringDurationUnit,
 } from '@clear-money/domain';
 import { t } from '../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
@@ -18,6 +19,7 @@ import {
   View,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { KeyboardAvoidingWrap } from './KeyboardAvoidingWrap';
 import {
   createRecurring,
   deleteRecurring,
@@ -26,6 +28,8 @@ import {
 } from '../lib/ledger';
 import { useThemeColors } from '../theme/ThemeContext';
 import { radius, shadow, space } from '../theme/tokens';
+
+const DURATION_UNITS: RecurringDurationUnit[] = ['forever', 'months', 'years'];
 
 function isDueWithinHours(nextDueAt: string | null, hours: number): boolean {
   if (!nextDueAt) return false;
@@ -123,6 +127,11 @@ function RecurringListColumn({
                           tz,
                         )}`
                       : null}
+                    {item.endsAt
+                      ? ` · ${t(locale, 'recurring.endsOn', {
+                          date: formatDate(item.endsAt, locale, tz),
+                        })}`
+                      : null}
                   </Text>
                   {dueSoon ? (
                     <View
@@ -204,6 +213,8 @@ export function RecurringHomeSection({
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState('1');
+  const [durationUnit, setDurationUnit] = useState<RecurringDurationUnit>('forever');
+  const [durationCount, setDurationCount] = useState('12');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -214,10 +225,14 @@ export function RecurringHomeSection({
       const decimals = currencyDecimalPlaces(currency as CurrencyCode);
       setAmount(String(editing.amountMinor / 10 ** decimals));
       setDay(String(editing.dayOfMonth));
+      setDurationUnit(editing.durationUnit ?? 'forever');
+      setDurationCount(String(editing.durationCount ?? 12));
     } else {
       setName('');
       setAmount('');
       setDay('1');
+      setDurationUnit('forever');
+      setDurationCount('12');
     }
     setError(null);
   }, [open, editing, currency]);
@@ -284,12 +299,21 @@ export function RecurringHomeSection({
       }
       const trimmed = name.trim();
       if (!trimmed) throw new Error(t(locale, 'recurring.invalidName'));
+      let count: number | null = null;
+      if (durationUnit !== 'forever') {
+        count = Number(durationCount);
+        if (!Number.isInteger(count) || count < 1) {
+          throw new Error(t(locale, 'recurring.invalidDuration'));
+        }
+      }
       if (editing) {
         await updateRecurring(spaceId, editing.id, {
           name: trimmed,
           amountMinor,
           dayOfMonth,
           kind,
+          durationUnit,
+          durationCount: count,
         });
       } else {
         await createRecurring({
@@ -298,6 +322,8 @@ export function RecurringHomeSection({
           amountMinor,
           kind,
           dayOfMonth,
+          durationUnit,
+          durationCount: count,
         });
       }
       setOpen(false);
@@ -342,7 +368,7 @@ export function RecurringHomeSection({
       />
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingWrap style={styles.modalBackdrop} keyboardVerticalOffset={16}>
           <View
             style={[
               styles.modalSheet,
@@ -392,6 +418,60 @@ export function RecurringHomeSection({
             <Text style={[styles.dayHint, { color: colors.inkMuted }]}>
               {t(locale, 'recurring.dayHint')}
             </Text>
+            <Text style={[styles.fieldLabel, { color: colors.inkSecondary }]}>
+              {t(locale, 'recurring.duration')}
+            </Text>
+            <View style={styles.durationRow}>
+              {DURATION_UNITS.map((unit) => {
+                const selected = durationUnit === unit;
+                return (
+                  <Pressable
+                    key={unit}
+                    onPress={() => setDurationUnit(unit)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[
+                      styles.durationChip,
+                      {
+                        borderColor: selected ? colors.brand : colors.border,
+                        backgroundColor: selected ? colors.brand : colors.canvas,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={{
+                        color: selected ? '#fff' : colors.ink,
+                        fontWeight: '600',
+                        fontSize: 13,
+                      }}
+                    >
+                      {t(locale, `recurring.${unit}`)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {durationUnit !== 'forever' ? (
+              <>
+                <Text style={[styles.fieldLabel, { color: colors.inkSecondary }]}>
+                  {t(locale, 'recurring.durationCount')}
+                </Text>
+                <TextInput
+                  value={durationCount}
+                  onChangeText={setDurationCount}
+                  keyboardType="number-pad"
+                  style={[
+                    styles.input,
+                    {
+                      borderColor: colors.border,
+                      color: colors.ink,
+                      backgroundColor: colors.canvas,
+                    },
+                  ]}
+                  placeholderTextColor={colors.inkMuted}
+                />
+              </>
+            ) : null}
             {error ? (
               <Text style={{ color: colors.expense, marginBottom: space[2] }}>{error}</Text>
             ) : null}
@@ -414,7 +494,7 @@ export function RecurringHomeSection({
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingWrap>
       </Modal>
     </View>
   );
@@ -504,6 +584,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   dayHint: { fontSize: 12, marginTop: -space[2], marginBottom: space[3] },
+  durationRow: { flexDirection: 'row', gap: space[2], marginBottom: space[3] },
+  durationChip: {
+    flex: 1,
+    minHeight: 40,
+    borderWidth: 1,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

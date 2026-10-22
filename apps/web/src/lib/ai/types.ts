@@ -9,6 +9,8 @@ export interface AiLedgerContext {
   currency: string;
   spaceName: string;
   spaceId: string;
+  /** UI language (en | fr | ar) — Penny must reply in this language. */
+  locale?: string;
   categories: Array<{ id: string; name: string; type: 'income' | 'expense' }>;
   totals: {
     incomeMinor: number;
@@ -41,9 +43,38 @@ export interface AiLedgerContext {
     kind: 'income' | 'expense';
     dayOfMonth: number;
     active: boolean;
+    durationUnit?: 'forever' | 'months' | 'years';
+    durationCount?: number | null;
   }>;
   /** Spaces the user can switch between. */
   spaces?: Array<{ id: string; name: string; currency: string }>;
+  /** IANA time zone of the device (used for hour-of-day charts). */
+  timeZone?: string;
+  /**
+   * Compact income/expense rows (newest first, capped by the client) so get_report can
+   * build category / trend / hour series with the shared domain helpers.
+   */
+  txns?: AiContextTxn[];
+}
+
+export interface AiContextTxn {
+  type: 'income' | 'expense';
+  amountMinor: number;
+  categoryId: string | null;
+  occurredAt: string;
+}
+
+/** Max compact rows clients should send in `AiLedgerContext.txns`. */
+export const AI_CONTEXT_TXN_LIMIT = 400;
+
+export type AiChartKind = 'category' | 'trend' | 'hours';
+
+export interface AiChartPoint {
+  label: string;
+  /** Expense (or category / hour amount) in minor units of the space currency. */
+  valueMinor: number;
+  /** Income in minor units — only set for `trend` charts. */
+  incomeMinor?: number;
 }
 
 export interface AiSuggestion {
@@ -132,6 +163,8 @@ export type AiAction =
       amountMajor: number;
       kind: 'income' | 'expense';
       dayOfMonth: number;
+      durationUnit?: 'forever' | 'months' | 'years';
+      durationCount?: number | null;
     }
   | {
       type: 'update_recurring';
@@ -141,6 +174,8 @@ export type AiAction =
       kind?: 'income' | 'expense';
       dayOfMonth?: number;
       active?: boolean;
+      durationUnit?: 'forever' | 'months' | 'years';
+      durationCount?: number | null;
     }
   | {
       type: 'delete_recurring';
@@ -149,7 +184,7 @@ export type AiAction =
   | {
       type: 'create_space';
       name: string;
-      spaceType: 'personal' | 'project' | 'family' | 'company';
+      spaceType: 'personal' | 'household' | 'shared' | 'project' | 'family' | 'company';
       currency?: string;
     }
   | {
@@ -166,6 +201,13 @@ export type AiAction =
       type: 'report';
       title: string;
       body: string;
+    }
+  | {
+      type: 'show_chart';
+      chart: AiChartKind;
+      title?: string;
+      currency?: string;
+      points: AiChartPoint[];
     };
 
 export interface AiChatResponse {

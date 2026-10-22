@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuroraBackdrop } from './AuroraBackdrop';
 import { PennyCompanion } from './PennyCompanion';
+import { useSetupLocale } from '../lib/setup-locale';
 import { SETUP_STEP_META, type SetupPose, type SetupStepId } from '../lib/setup-steps';
 import { colors, space } from '../theme/tokens';
 
@@ -17,6 +18,7 @@ export function SetupShell({
   pose?: SetupPose;
   bubble?: string;
 }) {
+  const { t } = useSetupLocale();
   const meta = SETUP_STEP_META[stepId];
   const total = 6;
 
@@ -27,7 +29,7 @@ export function SetupShell({
       <View style={styles.header}>
         <Text style={styles.brand}>Penny</Text>
         <Text style={styles.stepLabel}>
-          {meta.step}/{total}
+          {t('setup.progress', { step: meta.step, total })}
         </Text>
       </View>
       <View style={styles.progress} accessibilityRole="progressbar">
@@ -45,7 +47,7 @@ export function SetupShell({
       >
         <PennyCompanion
           pose={poseOverride ?? meta.pose}
-          bubble={bubbleOverride ?? meta.bubble}
+          bubble={bubbleOverride ?? t(meta.bubbleKey)}
         />
         <View style={styles.content}>{children}</View>
       </ScrollView>

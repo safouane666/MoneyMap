@@ -361,6 +361,14 @@ export function PennyFigureSvg({
   const doTilt = useSharedValue(0);
 
   useEffect(() => {
+    // Keep nav/sm avatars still — float makes the coin look clipped/off-center in the header.
+    if (compact) {
+      floatY.value = 0;
+      rotate.value = 0;
+      scale.value = 1;
+      doTilt.value = 0;
+      return;
+    }
     floatY.value = withRepeat(
       withTiming(-4, { duration: 1900, easing: Easing.inOut(Easing.sin) }),
       -1,
@@ -392,7 +400,7 @@ export function PennyFigureSvg({
     } else {
       scale.value = withTiming(1, { duration: 200 });
     }
-  }, [kit, floatY, rotate, scale, doTilt]);
+  }, [kit, compact, floatY, rotate, scale, doTilt]);
 
   const motionStyle = useAnimatedStyle(() => ({
     transform: [
@@ -402,7 +410,8 @@ export function PennyFigureSvg({
     ],
   }));
 
-  const viewBox = compact ? '0 20 200 180' : '-20 -10 240 230';
+  // Compact crop centered on the coin (not shifted up).
+  const viewBox = compact ? '20 20 160 160' : '-20 -10 240 230';
 
   return (
     <Animated.View
