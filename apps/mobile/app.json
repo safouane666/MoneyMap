@@ -2,7 +2,7 @@
   "expo": {
     "name": "Penny",
     "slug": "clear-money",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "default",
     "scheme": "penny",
     "userInterfaceStyle": "automatic",
@@ -28,7 +28,7 @@
         "backgroundColor": "#1EC569"
       },
       "package": "app.penny.mobile",
-      "versionCode": 6,
+      "versionCode": 7,
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "permissions": [
