@@ -175,14 +175,17 @@ export async function POST(req: Request) {
         },
       });
     } catch (inner) {
-      const message = inner instanceof Error ? inner.message : 'AI chat failed';
+      const raw = inner instanceof Error ? inner.message : 'AI chat failed';
+      const friendly = /not configured|AI_API_KEY|not loaded|Available:\s*\(none\)/i.test(raw)
+        ? 'Penny is temporarily unavailable — the model is not ready yet.'
+        : 'Penny is temporarily unavailable — try again in a moment.';
       await logPennyTurns(cookie, {
         spaceId: body.context.spaceId,
         sessionId,
         turns: [
           {
             role: 'assistant',
-            content: message.slice(0, CONTENT_MAX),
+            content: friendly.slice(0, CONTENT_MAX),
             source,
             locale,
             latencyMs: Date.now() - started,

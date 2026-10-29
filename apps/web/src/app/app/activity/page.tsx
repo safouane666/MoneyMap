@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  computePeriodTotals,
   currencyDecimalPlaces,
   filterByCategory,
   formatDate,
@@ -17,6 +18,7 @@ import { CategoryFilter } from '@/components/CategoryFilter';
 import { ExportDialog } from '@/components/ExportDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SummaryCard } from '@/components/SummaryCard';
 import {
   MonthYearFilter,
   currentMonthYear,
@@ -76,7 +78,7 @@ function ActivityItemContent({
 }
 
 export default function ActivityPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { state, hideTransaction, unhideTransaction, updateTransaction } = useLedger();
   const { showToast } = useToast();
   const space = getActiveSpace(state);
@@ -115,6 +117,11 @@ export default function ActivityPage() {
     if (typeFilter === 'income') list = list.filter((t) => t.type === 'income');
     return list;
   }, [monthTxns, categoryId, typeFilter]);
+
+  const totals = useMemo(
+    () => computePeriodTotals(txns, space.currency),
+    [txns, space.currency],
+  );
 
   const fileSuffix = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, '0')}`;
 
@@ -201,6 +208,54 @@ export default function ActivityPage() {
       </div>
 
       <CategoryFilter options={categoryOptions} value={categoryId} onChange={setCategoryId} />
+
+      <div className="animate-reveal space-y-2">
+        <p className="text-xs font-medium text-ink-muted">
+          {t('app.filteredTotal')} · {t('app.filteredCount', { count: txns.length })}
+        </p>
+        {typeFilter === 'income' ? (
+          <SummaryCard
+            label={t('app.income')}
+            amountMinor={totals.incomeMinor}
+            currency={space.currency}
+            locale={locale}
+            tone="income"
+          />
+        ) : typeFilter === 'expense' ? (
+          <SummaryCard
+            label={t('app.expense')}
+            amountMinor={totals.expenseMinor}
+            currency={space.currency}
+            locale={locale}
+            tone="expense"
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SummaryCard
+              label={t('app.income')}
+              amountMinor={totals.incomeMinor}
+              currency={space.currency}
+              locale={locale}
+              tone="income"
+            />
+            <SummaryCard
+              label={t('app.expense')}
+              amountMinor={totals.expenseMinor}
+              currency={space.currency}
+              locale={locale}
+              tone="expense"
+            />
+            <SummaryCard
+              label={t('app.net')}
+              amountMinor={totals.netMinor}
+              currency={space.currency}
+              locale={locale}
+              tone={totals.netMinor >= 0 ? 'income' : 'expense'}
+            />
+          </div>
+        )}
+      </div>
+
       {txns.length === 0 ? (
         <div className="animate-reveal stagger-1 rounded-[var(--cm-radius-card)] border border-dashed border-border bg-surface px-6 py-12 text-center">
           <p className="text-sm text-ink-secondary">{t('app.emptyHint')}</p>

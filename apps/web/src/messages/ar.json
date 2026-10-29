@@ -290,6 +290,8 @@
     "filterAll": "الكل",
     "filterSpend": "مصروفات",
     "filterReceive": "مقبوضات",
+    "filteredTotal": "المجموع بعد التصفية",
+    "filteredCount": "{count} قيود",
     "hidden": "مخفي من النشاط",
     "deleted": "تم حذف القيد",
     "entryArchived": "نُقل إلى الأرشيف",

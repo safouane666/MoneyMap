@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import {
+  computePeriodTotals,
   currencyDecimalPlaces,
   filterByCategory,
   parseDisplayAmount,
@@ -20,6 +21,7 @@ import { ActivityTxnRow } from '../../src/components/ActivityTxnRow';
 import { CategoryFilter } from '../../src/components/CategoryFilter';
 import { ExportButton } from '../../src/components/ExportButton';
 import { KeyboardAvoidingWrap } from '../../src/components/KeyboardAvoidingWrap';
+import { SummaryCard } from '../../src/components/SummaryCard';
 import {
   MonthYearFilter,
   currentMonthYear,
@@ -107,6 +109,8 @@ export default function ActivityScreen() {
     if (typeFilter === 'income') list = list.filter((t) => t.type === 'income');
     return list;
   }, [monthRows, categoryId, typeFilter]);
+
+  const totals = useMemo(() => computePeriodTotals(rows, currency), [rows, currency]);
 
   const fileSuffix = `${monthYear.year}-${String(monthYear.month + 1).padStart(2, '0')}`;
 
@@ -219,6 +223,53 @@ export default function ActivityScreen() {
               onChange={setCategoryId}
               locale={locale}
             />
+            <View style={styles.totalsBlock}>
+              <Text style={{ color: colors.inkMuted, fontSize: 12, fontWeight: '600' }}>
+                {t(locale, 'app.filteredTotal')} ·{' '}
+                {t(locale, 'app.filteredCount', { count: rows.length })}
+              </Text>
+              {typeFilter === 'income' ? (
+                <SummaryCard
+                  label={t(locale, 'app.income')}
+                  amountMinor={totals.incomeMinor}
+                  currency={currency}
+                  locale={locale}
+                  tone="income"
+                />
+              ) : typeFilter === 'expense' ? (
+                <SummaryCard
+                  label={t(locale, 'app.expense')}
+                  amountMinor={totals.expenseMinor}
+                  currency={currency}
+                  locale={locale}
+                  tone="expense"
+                />
+              ) : (
+                <View style={styles.totalsGrid}>
+                  <SummaryCard
+                    label={t(locale, 'app.income')}
+                    amountMinor={totals.incomeMinor}
+                    currency={currency}
+                    locale={locale}
+                    tone="income"
+                  />
+                  <SummaryCard
+                    label={t(locale, 'app.expense')}
+                    amountMinor={totals.expenseMinor}
+                    currency={currency}
+                    locale={locale}
+                    tone="expense"
+                  />
+                  <SummaryCard
+                    label={t(locale, 'app.net')}
+                    amountMinor={totals.netMinor}
+                    currency={currency}
+                    locale={locale}
+                    tone={totals.netMinor >= 0 ? 'income' : 'expense'}
+                  />
+                </View>
+              )}
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -320,6 +371,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: '600', letterSpacing: -0.3 },
   hint: { marginTop: 4, fontSize: 13 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space[2] },
+  totalsBlock: { gap: space[2] },
+  totalsGrid: { gap: space[2] },
   typeChip: {
     minHeight: 32,
     borderRadius: radius.pill,

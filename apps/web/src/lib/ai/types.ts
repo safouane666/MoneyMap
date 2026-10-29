@@ -58,14 +58,19 @@ export interface AiLedgerContext {
 }
 
 export interface AiContextTxn {
+  /** Real ledger id when available — needed for find/update across the full pool. */
+  id?: string;
   type: 'income' | 'expense';
   amountMinor: number;
   categoryId: string | null;
+  /** Display name mirror of categoryId (avoids id-only matching). */
+  category?: string | null;
+  description?: string | null;
   occurredAt: string;
 }
 
 /** Max compact rows clients should send in `AiLedgerContext.txns`. */
-export const AI_CONTEXT_TXN_LIMIT = 400;
+export const AI_CONTEXT_TXN_LIMIT = 800;
 
 export type AiChartKind = 'category' | 'trend' | 'hours';
 

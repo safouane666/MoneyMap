@@ -721,7 +721,7 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         occurredAt: txn.occurredAt,
       }));
 
-    // Compact rows so Penny's get_report can build category / trend / hour charts.
+    // Compact rows so Penny can report / search / compare categories across the pool.
     const txns = getVisibleSpaceTransactions(state, space.id)
       .filter(
         (txn) =>
@@ -731,9 +731,12 @@ export function AiChat({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       )
       .slice(0, AI_CONTEXT_TXN_LIMIT)
       .map((txn) => ({
+        id: txn.id,
         type: txn.type as 'income' | 'expense',
         amountMinor: txn.amountMinor,
         categoryId: txn.categoryId,
+        category: state.categories.find((c) => c.id === txn.categoryId)?.name ?? null,
+        description: txn.description,
         occurredAt: txn.occurredAt,
       }));
 

@@ -222,6 +222,25 @@ function claimsLedgerSave(reply: string): boolean {
   return /\b(added|logged|saved|recorded|put(?:ting)? it|filed|done|all set)\b/i.test(reply);
 }
 
+function reportSpokenSummary(actions: AiAction[], locale = 'en'): string | null {
+  const report = actions.find((a) => a.type === 'report');
+  if (!report || report.type !== 'report') return null;
+  const lines = report.body
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (!lines.length) return null;
+  // Prefer the totals / net line over the title.
+  const insight =
+    lines.find((l) => /\b(in |out |net|received|spent|income|expense|won|lost)\b/i.test(l)) ??
+    lines[1] ??
+    lines[0];
+  const lang = locale.toLowerCase().slice(0, 2);
+  if (lang === 'fr') return `Voici l’essentiel : ${insight}`;
+  if (lang === 'ar') return `الخلاصة: ${insight}`;
+  return `Here’s the short version: ${insight}`;
+}
+
 function fallbackReply(actions: AiAction[], currency: string, locale = 'en'): string {
   const lang = locale.toLowerCase().slice(0, 2);
   const ask = actions.find((a) => a.type === 'ask_category');
@@ -240,6 +259,8 @@ function fallbackReply(actions: AiAction[], currency: string, locale = 'en'): st
       ? `Got it — ${ask.amountMajor} ${currency} out the door. Where should we park this one?`
       : `Nice — ${ask.amountMajor} ${currency} coming in. What kind of income is this?`;
   }
+  const spokenReport = reportSpokenSummary(actions, locale);
+  if (spokenReport) return spokenReport;
   if (actions.length === 0) {
     if (lang === 'fr') {
       return 'Je peux enregistrer une dépense/revenu, créer des catégories ou résumer cet espace. Ex. « j’ai dépensé 12 en café ».';
@@ -277,8 +298,6 @@ function fallbackReply(actions: AiAction[], currency: string, locale = 'en'): st
       );
     } else if (action.type === 'update_transaction') {
       bits.push(lang === 'fr' ? 'une mise à jour' : lang === 'ar' ? 'تحديث' : 'an entry update');
-    } else if (action.type === 'report') {
-      bits.push(lang === 'fr' ? 'un résumé' : lang === 'ar' ? 'ملخص' : 'a summary');
     } else if (action.type === 'delete_transaction') {
       bits.push(lang === 'fr' ? 'suppression' : lang === 'ar' ? 'حذف' : 'a deletion');
     }
@@ -289,6 +308,17 @@ function fallbackReply(actions: AiAction[], currency: string, locale = 'en'): st
   if (lang === 'fr') return `C’est noté — ${bits.join(', ')}.`;
   if (lang === 'ar') return `تم — ${bits.join('، ')}.`;
   return `Logged — ${bits.join(', ')}.`;
+}
+
+/** Replies that are too dump / generic when we already have a real report card. */
+function isWeakReportNarration(reply: string): boolean {
+  const t = reply.trim();
+  if (!t) return true;
+  if (/^logged\s*[—\-–].*summary/i.test(t)) return true;
+  if (/^(here'?s|here is) (your )?(spending|income) report/i.test(t) && t.length > 280) return true;
+  if (/configured model|not loaded|502 bad gateway|ai provider error/i.test(t)) return true;
+  if (/^hey[!.,]?\s+want to log/i.test(t)) return true;
+  return false;
 }
 
 function stripUnsafeDeletes(lastUser: AiChatMessage | undefined, actions: AiAction[]): AiAction[] {
@@ -397,7 +427,7 @@ export async function runAiChat(input: {
           },
           {
             role: 'user',
-            content: `Confirm what you just did for the ledger in one short sentence in ${locale}. No tools.`,
+            content: `Confirm what you just did for the ledger in one short sentence in ${locale}. No tools. No markdown. No emojis.`,
           },
         ],
         false,
@@ -408,6 +438,7 @@ export async function runAiChat(input: {
     const askCategory = actions.find(
       (a): a is Extract<AiAction, { type: 'ask_category' }> => a.type === 'ask_category',
     );
+    const hasReport = actions.some((a) => a.type === 'report');
 
     // Never let the model claim a save when we're still waiting on a category,
     // or when we synthesized actions after a tool-less / wrong-tool reply.
@@ -415,9 +446,9 @@ export async function runAiChat(input: {
       const invented =
         claimsLedgerSave(reply) ||
         /\b(groceries|usd|\$)\b/i.test(reply);
-      if (!reply || invented || askCategory) {
+      if (!reply || invented || askCategory || (hasReport && isWeakReportNarration(reply))) {
         // For ask_category always prefer the chip prompt; for other actions replace invented saves.
-        if (askCategory || !toolCalls.length || invented) {
+        if (askCategory || !toolCalls.length || invented || (hasReport && isWeakReportNarration(reply))) {
           reply = fallbackReply(actions, input.context.currency, locale);
         }
       }

@@ -290,6 +290,8 @@
     "filterAll": "Tout",
     "filterSpend": "Dépenses",
     "filterReceive": "Revenus",
+    "filteredTotal": "Total filtré",
+    "filteredCount": "{count} entrées",
     "hidden": "Masqué de l'activité",
     "deleted": "Entrée supprimée",
     "entryArchived": "Déplacé vers les archives",

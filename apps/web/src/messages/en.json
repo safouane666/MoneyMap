@@ -290,6 +290,8 @@
     "filterAll": "All",
     "filterSpend": "Spendings",
     "filterReceive": "Receivings",
+    "filteredTotal": "Filtered total",
+    "filteredCount": "{count} entries",
     "hidden": "Hidden from activity",
     "deleted": "Entry deleted",
     "entryArchived": "Moved to archive",

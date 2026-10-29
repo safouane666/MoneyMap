@@ -356,6 +356,8 @@
   "app.filterAll": "Tout",
   "app.filterSpend": "Dépenses",
   "app.filterReceive": "Revenus",
+  "app.filteredTotal": "Total filtré",
+  "app.filteredCount": "{count} entrées",
   "app.editEntry": "Modifier l’entrée",
   "app.saveChanges": "Enregistrer",
   "app.saved": "Enregistré",

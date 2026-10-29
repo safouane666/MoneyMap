@@ -1,8 +1,10 @@
 import {
   addMonthsToIsoDate,
+  categoryBreakdown,
   currencyDecimalPlaces,
   DEFAULT_EXPENSE_CATEGORIES,
   DEFAULT_INCOME_CATEGORIES,
+  filterTransactionsByPeriod,
   formatCategoryChip,
   matchDefaultCategoryHint,
   monthlyTargetMinor,
@@ -183,13 +185,19 @@ export const AI_TOOLS = [
     type: 'function' as const,
     function: {
       name: 'find_entries',
-      description: 'Search recent ledger entries by note, category, amount, or type so you can update them.',
+      description:
+        'Search the ledger pool (not just the last few rows) by note, category, amount, or type. Returns match totals plus sample entries. Prefer analyze_category when the user wants income vs spend for a named category.',
       parameters: {
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Text to match in note or category' },
           amount: { type: 'number', description: 'Major-unit amount to match approximately' },
           type: { type: 'string', enum: ['expense', 'income'] },
+          period: {
+            type: 'string',
+            enum: ['thisWeek', 'thisMonth', 'lastMonth', 'last3Months', 'thisYear', 'allTime'],
+            description: 'Optional period filter (default allTime)',
+          },
         },
       },
     },
@@ -344,13 +352,14 @@ export const AI_TOOLS = [
     function: {
       name: 'get_report',
       description:
-        'REQUIRED for any question about spending, income, categories, trends, totals, or "where did my money go". Returns real period totals plus structured series (top categories, income/expense trend, spending by hour) and shows a chart in the UI. Never answer such questions from memory or guess numbers.',
+        'REQUIRED for overall spending/income/trend/hour questions. Returns real period totals plus structured series and a chart. For a named category (e.g. Sponsore income vs spend, difference/won/lost), use analyze_category instead. Never answer from memory.',
       parameters: {
         type: 'object',
         properties: {
           focus: {
             type: 'string',
-            description: 'Optional focus, e.g. expenses, income, net, categories, trend, hours',
+            description:
+              'Optional focus: expenses/spending, income/earnings, net, categories, trend, hours',
           },
           period: {
             type: 'string',
@@ -361,7 +370,7 @@ export const AI_TOOLS = [
             type: 'string',
             enum: ['auto', 'category', 'trend', 'hours', 'none'],
             description:
-              'Chart to show: category = top spending categories, trend = income vs expense over time, hours = spending by hour of day. Default auto picks from focus.',
+              'Chart to show: category = top categories (expense or income from focus), trend = income vs expense over time, hours = spending by hour of day. Default auto picks from focus.',
           },
         },
       },
@@ -370,8 +379,31 @@ export const AI_TOOLS = [
   {
     type: 'function' as const,
     function: {
+      name: 'analyze_category',
+      description:
+        'REQUIRED when the user asks about one category (or same-named income+expense categories): totals, counts, and income−expense difference across the full period pool. Use for “how much did I win/lose on Sponsore”, “difference between my two Sponsore categories”, etc. Never estimate from recent rows alone.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Category name or fragment, e.g. Sponsore',
+          },
+          period: {
+            type: 'string',
+            enum: ['thisWeek', 'thisMonth', 'lastMonth', 'last3Months', 'thisYear', 'allTime'],
+            description: 'Window (default thisMonth)',
+          },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'list_categories',
-      description: 'List categories available in the active space.',
+      description: 'List categories available in the active space (includes type: income vs expense).',
       parameters: { type: 'object', properties: {} },
     },
   },
@@ -779,19 +811,96 @@ function queueAskCategory(
   };
 }
 
+type SearchableEntry = {
+  id: string;
+  type: string;
+  amountMinor: number;
+  description: string | null;
+  category: string | null;
+  categoryId: string | null;
+  occurredAt: string;
+};
+
+function normalizeCategoryQuery(name: string): string {
+  return stripCategoryEmoji(name).trim().toLowerCase();
+}
+
+/** Full searchable pool from compact txns (+ recent fallback). */
+function searchableEntries(context: AiLedgerContext): SearchableEntry[] {
+  const fromTxns = (Array.isArray(context.txns) ? context.txns : [])
+    .slice(0, AI_CONTEXT_TXN_LIMIT)
+    .filter(
+      (t) =>
+        (t.type === 'income' || t.type === 'expense') &&
+        Number.isFinite(t.amountMinor) &&
+        t.amountMinor > 0 &&
+        Number.isFinite(Date.parse(t.occurredAt)),
+    )
+    .map((t, i) => {
+      const catName =
+        t.category ??
+        (t.categoryId
+          ? context.categories.find((c) => c.id === t.categoryId)?.name ?? null
+          : null);
+      return {
+        id: t.id || `ctx_${i}`,
+        type: t.type,
+        amountMinor: t.amountMinor,
+        description: t.description ?? null,
+        category: catName,
+        categoryId: t.categoryId,
+        occurredAt: t.occurredAt,
+      };
+    });
+  if (fromTxns.length) return fromTxns;
+  return context.recent.map((r) => ({
+    id: r.id,
+    type: r.type,
+    amountMinor: r.amountMinor,
+    description: r.description,
+    category: r.category,
+    categoryId: null,
+    occurredAt: r.occurredAt,
+  }));
+}
+
 function findRecentMatches(
   context: AiLedgerContext,
-  opts: { query?: string; amount?: number | null; type?: string },
+  opts: {
+    query?: string;
+    amount?: number | null;
+    type?: string;
+    period?: ReportPeriod;
+  },
 ) {
-  const q = opts.query?.toLowerCase();
-  return context.recent.filter((r) => {
+  const q = opts.query ? normalizeCategoryQuery(opts.query) : '';
+  let rows = searchableEntries(context);
+  if (opts.period && opts.period !== 'allTime') {
+    const asTxn = rows.map((r) => ({
+      id: r.id,
+      spaceId: context.spaceId,
+      type: r.type as LedgerTransaction['type'],
+      amountMinor: r.amountMinor,
+      currency: context.currency,
+      categoryId: r.categoryId,
+      description: r.description,
+      occurredAt: r.occurredAt,
+      createdAt: r.occurredAt,
+      createdBy: '',
+      source: 'manual' as const,
+      status: 'confirmed' as const,
+    }));
+    const scoped = new Set(filterTransactionsByPeriod(asTxn, opts.period).map((t) => t.id));
+    rows = rows.filter((r) => scoped.has(r.id));
+  }
+  return rows.filter((r) => {
     if (opts.type && r.type !== opts.type) return false;
     if (opts.amount != null) {
       const major = majorFromMinor(r.amountMinor, context.currency);
       if (Math.abs(major - opts.amount) > 0.05) return false;
     }
     if (q) {
-      const hay = `${r.description ?? ''} ${r.category ?? ''}`.toLowerCase();
+      const hay = normalizeCategoryQuery(`${r.description ?? ''} ${r.category ?? ''}`);
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -954,8 +1063,10 @@ function buildHumanReportBody(input: {
   spaceName: string;
   currency: string;
   periodLabel?: string;
+  focus?: string;
   totals: { incomeMinor: number; expenseMinor: number; netMinor: number };
   topCategory?: { name: string; amountMinor: number; share: number } | null;
+  topIncome?: { name: string; amountMinor: number; share: number } | null;
   recent: Array<{
     type: string;
     amountMinor: number;
@@ -963,18 +1074,39 @@ function buildHumanReportBody(input: {
     category: string | null;
   }>;
 }): string {
-  const { spaceName, currency, periodLabel, totals, topCategory, recent } = input;
+  const { spaceName, currency, periodLabel, focus, totals, topCategory, topIncome, recent } =
+    input;
+  const f = (focus ?? '').toLowerCase();
+  const incomeFocus = /\b(income|earn|salary|receiv|revenu|دخل|راتب)\b/.test(f);
+  const expenseFocus = /\b(spend|expense|outgo|dépens|مصروف)\b/.test(f);
+
   const lines = [
     periodLabel ? `${spaceName} · ${periodLabel}` : spaceName,
-    `In ${formatMinor(totals.incomeMinor, currency)} · out ${formatMinor(totals.expenseMinor, currency)} · net ${formatMinor(totals.netMinor, currency)}`,
+    incomeFocus
+      ? `Income ${formatMinor(totals.incomeMinor, currency)} · expenses ${formatMinor(totals.expenseMinor, currency)} for context · net ${formatMinor(totals.netMinor, currency)}`
+      : expenseFocus
+        ? `Expenses ${formatMinor(totals.expenseMinor, currency)} · income ${formatMinor(totals.incomeMinor, currency)} for context · net ${formatMinor(totals.netMinor, currency)}`
+        : `In ${formatMinor(totals.incomeMinor, currency)} · out ${formatMinor(totals.expenseMinor, currency)} · net ${formatMinor(totals.netMinor, currency)}`,
   ];
-  if (topCategory) {
+  if (incomeFocus && topIncome) {
+    lines.push(
+      `Top income source: ${topIncome.name} · ${formatMinor(topIncome.amountMinor, currency)} (${Math.round(topIncome.share * 100)}%)`,
+    );
+  } else if (topCategory) {
     lines.push(
       `Biggest spend: ${topCategory.name} · ${formatMinor(topCategory.amountMinor, currency)} (${Math.round(topCategory.share * 100)}%)`,
     );
   }
-  if (recent.length) {
-    lines.push(`Latest: ${recent.slice(0, 5).map((r) => formatRecentEntryHuman(r, currency)).join('; ')}`);
+  const recentSlice = incomeFocus
+    ? recent.filter((r) => r.type === 'income').slice(0, 5)
+    : expenseFocus
+      ? recent.filter((r) => r.type === 'expense').slice(0, 5)
+      : recent.slice(0, 5);
+  const recentForLine = recentSlice.length ? recentSlice : recent.slice(0, 5);
+  if (recentForLine.length) {
+    lines.push(
+      `Latest: ${recentForLine.map((r) => formatRecentEntryHuman(r, currency)).join('; ')}`,
+    );
   } else {
     lines.push('Latest: nothing logged yet');
   }
@@ -1001,13 +1133,13 @@ function contextTransactions(context: AiLedgerContext): LedgerTransaction[] {
         Number.isFinite(Date.parse(t.occurredAt)),
     )
     .map((t, i) => ({
-      id: `ctx_${i}`,
+      id: t.id || `ctx_${i}`,
       spaceId: context.spaceId,
       type: t.type,
       amountMinor: t.amountMinor,
       currency: context.currency,
       categoryId: t.categoryId,
-      description: null,
+      description: t.description ?? null,
       occurredAt: t.occurredAt,
       createdAt: t.occurredAt,
       createdBy: '',
@@ -1021,8 +1153,17 @@ function resolveChartKind(chartArg: string | undefined, focus: string): AiChartK
   if (chartArg === 'category' || chartArg === 'trend' || chartArg === 'hours') return chartArg;
   const f = focus.toLowerCase();
   if (/\b(hours?|time of day|heures?)\b|ساعة/.test(f)) return 'hours';
-  if (/\b(trend|over time|income|net|tendance)\b|اتجاه/.test(f)) return 'trend';
+  if (/\b(trend|over time|vs|versus|compared|tendance)\b|اتجاه/.test(f)) return 'trend';
+  // Income or spending reports → category breakdown (not the trend chart).
   return 'category';
+}
+
+function focusIsIncome(focus: string): boolean {
+  return /\b(income|earn|salary|receiv|revenu|دخل|راتب)\b/i.test(focus);
+}
+
+function focusIsExpense(focus: string): boolean {
+  return /\b(spend|expense|outgo|dépens|مصروف)\b/i.test(focus);
 }
 
 function trendLabel(isoDate: string, period: ReportPeriod, locale: string): string {
@@ -1062,23 +1203,36 @@ function runReport(
     ? reportSnapshot(txns, currency, period, nameFor, { timeZone: context.timeZone })
     : null;
   const totals = snap?.totals ?? context.totals;
+  const scoped = hasSeries ? filterTransactionsByPeriod(txns, period) : [];
+  const incomeCategories = hasSeries
+    ? categoryBreakdown(scoped, currency, nameFor, 'income')
+    : [];
+  const topIncome = incomeCategories[0] ?? null;
+  const incomeFocus = focusIsIncome(focus);
+  const expenseFocus = focusIsExpense(focus);
 
   const body = buildHumanReportBody({
     spaceName: context.spaceName,
     currency,
     periodLabel: snap ? PERIOD_LABEL[period] : undefined,
+    focus,
     totals,
     topCategory: snap?.topCategory ?? null,
+    topIncome,
     recent: context.recent,
   });
 
+  const title = incomeFocus
+    ? `${PERIOD_TITLE[period]} · income`
+    : expenseFocus
+      ? `${PERIOD_TITLE[period]} · spending`
+      : focus === 'overview' || focus.length > 24
+        ? PERIOD_TITLE[period]
+        : focus.slice(0, 48);
+
   actions.push({
     type: 'report',
-    // Long focus strings are raw user text from the deterministic fallback — keep the title tidy.
-    title:
-      focus === 'overview' || focus.length > 24
-        ? PERIOD_TITLE[period]
-        : focus.slice(0, 48),
+    title,
     body,
   });
 
@@ -1095,7 +1249,12 @@ function runReport(
   }
 
   // Structured series for the model + chart payload for the UI.
-  const categories = snap.categories.map((c) => ({
+  const expenseCats = snap.categories.map((c) => ({
+    name: c.name,
+    amount: major(c.amountMinor),
+    sharePct: Math.round(c.share * 100),
+  }));
+  const incomeCats = incomeCategories.map((c) => ({
     name: c.name,
     amount: major(c.amountMinor),
     sharePct: Math.round(c.share * 100),
@@ -1114,8 +1273,9 @@ function runReport(
   const chart = resolveChartKind(asString(args.chart), focus);
   let points: AiChartPoint[] = [];
   if (chart === 'category') {
-    const top = snap.categories.slice(0, 6);
-    const rest = snap.categories.slice(6).reduce((sum, c) => sum + c.amountMinor, 0);
+    const source = incomeFocus ? incomeCategories : snap.categories;
+    const top = source.slice(0, 6);
+    const rest = source.slice(6).reduce((sum, c) => sum + c.amountMinor, 0);
     points = top.map((c) => ({ label: c.name, valueMinor: c.amountMinor }));
     if (rest > 0) points.push({ label: otherCategoryLabel(locale), valueMinor: rest });
   } else if (chart === 'trend') {
@@ -1154,12 +1314,142 @@ function runReport(
             sharePct: Math.round(snap.topCategory.share * 100),
           }
         : null,
-      categories: categories.slice(0, 6),
+      topIncome: topIncome
+        ? {
+            name: topIncome.name,
+            amount: major(topIncome.amountMinor),
+            sharePct: Math.round(topIncome.share * 100),
+          }
+        : null,
+      categories: expenseCats.slice(0, 6),
+      incomeCategories: incomeCats.slice(0, 6),
+      insightHint: incomeFocus
+        ? 'Talk about income sources (incomeCategories / topIncome). Do not lead with biggest spend.'
+        : expenseFocus
+          ? 'Talk about spending categories. Mention income only as context.'
+          : 'Give one clear insight — do not dump every line.',
       trend,
       peakHours,
       chartShown: chart && hasData ? chart : null,
       summary: body,
       recent: context.recent.slice(0, 5).map((r) => formatRecentEntryHuman(r, currency)),
+    },
+  };
+}
+
+function runAnalyzeCategory(
+  context: AiLedgerContext,
+  args: Record<string, unknown>,
+  actions: AiAction[],
+): { ok: true; result: Record<string, unknown> } | { ok: false; error: string } {
+  const query = asString(args.query);
+  if (!query) return { ok: false, error: 'query is required' };
+  const periodRaw = asString(args.period) as ReportPeriod | undefined;
+  const period: ReportPeriod =
+    periodRaw && REPORT_PERIODS.includes(periodRaw) ? periodRaw : 'thisMonth';
+  const currency = context.currency;
+  const q = normalizeCategoryQuery(query);
+
+  const matchedCats = context.categories.filter((c) => {
+    const n = normalizeCategoryQuery(c.name);
+    return n === q || n.includes(q) || q.includes(n);
+  });
+
+  const matches = findRecentMatches(context, { query, period });
+  // Prefer rows whose category matched; if categories matched by id, include those too.
+  const matchedIds = new Set(matchedCats.map((c) => c.id));
+  const byCatId = matchedIds.size
+    ? searchableEntries(context).filter((r) => r.categoryId && matchedIds.has(r.categoryId))
+    : [];
+  let periodScoped = byCatId.length ? byCatId : matches;
+  if (period !== 'allTime' && byCatId.length) {
+    const asTxn = byCatId.map((r) => ({
+      id: r.id,
+      spaceId: context.spaceId,
+      type: r.type as LedgerTransaction['type'],
+      amountMinor: r.amountMinor,
+      currency,
+      categoryId: r.categoryId,
+      description: r.description,
+      occurredAt: r.occurredAt,
+      createdAt: r.occurredAt,
+      createdBy: '',
+      source: 'manual' as const,
+      status: 'confirmed' as const,
+    }));
+    const scoped = new Set(filterTransactionsByPeriod(asTxn, period).map((t) => t.id));
+    periodScoped = byCatId.filter((r) => scoped.has(r.id));
+  }
+
+  let incomeMinor = 0;
+  let expenseMinor = 0;
+  let incomeCount = 0;
+  let expenseCount = 0;
+  for (const r of periodScoped) {
+    if (r.type === 'income') {
+      incomeMinor += r.amountMinor;
+      incomeCount += 1;
+    } else if (r.type === 'expense') {
+      expenseMinor += r.amountMinor;
+      expenseCount += 1;
+    }
+  }
+  const netMinor = incomeMinor - expenseMinor;
+  const meaning =
+    netMinor > 0 ? 'won' : netMinor < 0 ? 'lost' : 'even';
+
+  const samples = periodScoped
+    .slice()
+    .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+    .slice(0, 8)
+    .map((r) => formatRecentEntryHuman(r, currency));
+
+  const body = [
+    `${stripCategoryEmoji(query).trim() || query} · ${PERIOD_LABEL[period]}`,
+    `Received ${formatMinor(incomeMinor, currency)} (${incomeCount} entries) · spent ${formatMinor(expenseMinor, currency)} (${expenseCount} entries)`,
+    netMinor === 0
+      ? 'Net: even'
+      : `Net: ${formatMinor(Math.abs(netMinor), currency)} ${meaning}`,
+    samples.length ? `Sample: ${samples.join('; ')}` : 'No matching entries in this period.',
+  ].join('\n');
+
+  actions.push({
+    type: 'report',
+    title: `${stripCategoryEmoji(query).trim() || query} · ${PERIOD_TITLE[period]}`,
+    body,
+  });
+
+  return {
+    ok: true,
+    result: {
+      query,
+      period,
+      currency,
+      matchedCategories: matchedCats.map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+      })),
+      income: {
+        count: incomeCount,
+        amount: majorFromMinor(incomeMinor, currency),
+        formatted: formatMinor(incomeMinor, currency),
+      },
+      expense: {
+        count: expenseCount,
+        amount: majorFromMinor(expenseMinor, currency),
+        formatted: formatMinor(expenseMinor, currency),
+      },
+      net: {
+        amount: majorFromMinor(netMinor, currency),
+        formatted: formatMinor(netMinor, currency),
+        meaning,
+      },
+      entryCount: periodScoped.length,
+      samples,
+      summary: body,
+      insightHint:
+        'Use income.count/expense.count and net.meaning. Never claim there are only 1–2 entries if entryCount is higher.',
     },
   };
 }
@@ -1204,16 +1494,32 @@ export async function runAiTool(
       }
     }
     case 'find_entries': {
-      const matches = findRecentMatches(context, {
+      const periodRaw = asString(args.period) as ReportPeriod | undefined;
+      const period =
+        periodRaw && REPORT_PERIODS.includes(periodRaw) ? periodRaw : undefined;
+      const allMatches = findRecentMatches(context, {
         query: asString(args.query),
         amount: asNumber(args.amount),
         type: asString(args.type),
-      }).slice(0, 8);
+        period,
+      });
+      let incomeMinor = 0;
+      let expenseMinor = 0;
+      for (const m of allMatches) {
+        if (m.type === 'income') incomeMinor += m.amountMinor;
+        else if (m.type === 'expense') expenseMinor += m.amountMinor;
+      }
+      const samples = allMatches.slice(0, 20);
       return {
         ok: true,
         result: {
-          count: matches.length,
-          entries: matches.map((m) => ({
+          count: allMatches.length,
+          truncated: allMatches.length > samples.length,
+          period: period ?? 'allTime',
+          incomeTotal: majorFromMinor(incomeMinor, context.currency),
+          expenseTotal: majorFromMinor(expenseMinor, context.currency),
+          netTotal: majorFromMinor(incomeMinor - expenseMinor, context.currency),
+          entries: samples.map((m) => ({
             id: m.id,
             type: m.type,
             amount: majorFromMinor(m.amountMinor, context.currency),
@@ -1222,8 +1528,13 @@ export async function runAiTool(
             note: m.description,
             occurredAt: m.occurredAt,
           })),
+          insightHint:
+            'Totals cover every match (count). Samples may be truncated — never say there are only as many entries as the sample list.',
         },
       };
+    }
+    case 'analyze_category': {
+      return runAnalyzeCategory(context, args, actions);
     }
     case 'update_entry': {
       const newNote = asString(args.newNote);
@@ -1462,7 +1773,12 @@ export async function runAiTool(
       return {
         ok: true,
         result: {
-          categories: context.categories.map((c) => ({ name: c.name, type: c.type })),
+          categories: context.categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+          })),
+          note: 'Same display name can exist twice (income + expense). Use analyze_category to compare them.',
         },
       };
     }
@@ -1819,8 +2135,10 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     // Persona
     'You are Penny — calm AI money companion inside the MoneyMap app. Speak in first person as Penny only.',
     'Tone: warm, practical, lightly funny — at most one short quip. Write like a short text to a friend: plain words only.',
-    'FORMATTING: Never use markdown (no **, __, # headings, - bullet lists, numbered dumps, or code). Never show database ids (txn_…, goal_…, cat_…). Never paste or restate the whole report card — the app already shows it. One insight + one soft question is enough (1–3 short sentences).',
-    'Greetings or small talk: answer in one line and offer to log spend or show a report. No tools.',
+    'FORMATTING: Never use markdown (no **, __, # headings, - bullet lists, numbered dumps, or code). Never show database ids (txn_…, goal_…, cat_…). Never paste or restate the whole report card — the app already shows it. One insight + one soft question is enough (1–3 short sentences). Never emit thinking tags (</think>, <think>), never emoji spam, never duplicate your answer.',
+    'Greetings or small talk: one short friendly line, then offer help — do not reply with the same canned sentence every time. No tools for pure greetings.',
+    'If the user says you are wrong or that there are more entries, call analyze_category or find_entries again over allTime / thisMonth — never insist on the previous incomplete count.',
+    'Merchant / note questions (“how much on coffee”, “chamli”) → find_entries with that query (and period). Use the returned count + expenseTotal, not memory.',
     // Locale
     `LANGUAGE: Reply entirely in ${replyLang} (app locale "${locale}"), including category names and chart/report wording. Only switch if the user clearly writes in another language. Tool arguments stay in the user's own wording.`,
     `Currency is ${context.currency} — never assume USD and never write "$" unless ${context.currency} is USD. Amounts without a foreign ISO code (including local shorthand like DT/dnt/dinar for TND) are already in ${context.currency}; only convert_currency when a different ISO code is named.`,
@@ -1828,10 +2146,12 @@ export function buildSystemPrompt(context: AiLedgerContext): string {
     'Use tools for every ledger mutation and every number you report. Never say saved/created/deleted/updated/done unless the matching tool was called this turn.',
     'No category → ask_for_category (chips). Clear category → add_expense/add_income with a default label (Groceries, Food & Drinks, Housing, Bills, Transport, Shopping, Entertainment, Health, Education, Travel, Gifts, Family, Loans & Debts, Other). If the user answers a category question with a short word, reuse the amount from the previous message — do not ask for the amount again.',
     'Notes optional — do not ask for a note after saving unless the user asked.',
-    'Questions about spending, income, categories, trends, totals, "where did my money go", or time of day → call get_report (set period and chart). Never answer from memory or invent amounts, merchants, goals, or balances; use only tool results and the context below.',
+    'Overall spending/income/trend/hour questions → get_report (set focus=expenses|income|trend|hours and period). Income reports must use incomeCategories/topIncome — never reuse the biggest-spend line. Never invent amounts.',
+    'Named category P&L (Sponsore, difference, won/lost, income vs spend for one label, two categories with the same name) → analyze_category with that query + period. Trust entryCount/income.count/expense.count from the tool — never claim only 1–2 entries if count is higher. find_entries is for locating rows to edit/delete, not for category totals.',
     'Goal progress → list_goals first. Recurring items → list_recurring first. Unsure which entry/category/goal → find_entries / list_categories / list_goals, then act.',
     // Visuals
-    'get_report draws the chart in the app: chart=category for "where did it go / biggest spend", trend for "over time / income vs spend", hours for "when do I spend". Do not re-list every number in text — give one insight (top category, peak hour, or net) in 1–2 sentences. Skip charts when the user only wants a single total.',
+    'get_report draws the chart: category for spend or income sources, trend for over-time income vs spend, hours for time-of-day. One insight in 1–2 sentences; the card already shows the numbers.',
+    'Recommendations: use get_report or analyze_category first, then suggest one concrete next step (rename category, set a goal, cut a top spend). Never invent merchants or fake counts.',
     'Do not describe app screens you are unsure of; the tabs are Home, Activity, Goals, Reports.',
     // Safety
     'If the message is gibberish, a lone word, or unclear, ask one short clarifying question and call no tools. Never call delete/hide/update tools on unclear input or on short replies like "yes", "ok", "both", "any".',

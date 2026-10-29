@@ -228,6 +228,8 @@
   "app.filterAll": "All",
   "app.filterSpend": "Spendings",
   "app.filterReceive": "Receivings",
+  "app.filteredTotal": "Filtered total",
+  "app.filteredCount": "{count} entries",
   "app.editEntry": "Edit entry",
   "app.saveChanges": "Save changes",
   "app.saved": "Saved",

@@ -1,4 +1,8 @@
-import { currencyDecimalPlaces, matchDefaultCategoryHint } from '@clear-money/domain';
+import {
+  currencyDecimalPlaces,
+  matchDefaultCategoryHint,
+  stripCategoryEmoji,
+} from '@clear-money/domain';
 import { buildCategorySuggestions, runAiTool } from './tools';
 import type { AiAction, AiLedgerContext } from './types';
 
@@ -15,6 +19,34 @@ export type MoneyDraft = {
 /** Report / chart questions — Penny must call get_report instead of guessing numbers. */
 const REPORT_INTENT =
   /\b(how much|summary|summarize|report|balance|totals?|breakdown|trend|charts?|graphs?|biggest|top categor(?:y|ies)|which hour|time of day|by hour|where did .{0,30}(?:go|went)|most .{0,12}(?:spend|money)|graphique|tendance|répartition)\b|رسم/i;
+
+/** Category P&L / difference — must call analyze_category over the full pool. */
+const CATEGORY_ANALYZE_INTENT =
+  /\b(difference|diff|won|lost|profit|net on|compare|how much .{0,40}(?:from|on|with)|income .{0,20}(?:and|vs|versus) .{0,20}spend|spend .{0,20}(?:and|vs|versus) .{0,20}income)\b/i;
+
+/** User disputes Penny’s numbers — re-query the pool. */
+const DISPUTE_INTENT =
+  /\b(wrong|na+h+|not really|there are (a lot )?more|you (only )?compared|only (see|saw) (one|two)|bruh)\b/i;
+
+/** “How much on coffee / chamli” — search notes + categories (not “I spent 12 on coffee” logs). */
+const SPEND_ON_INTENT =
+  /\bhow much\b.{0,48}\bon\b\s+([a-zA-ZÀ-ÿ0-9][\wÀ-ÿ &'-]{1,40})/i;
+
+function detectCategoryQuery(
+  userText: string,
+  context: AiLedgerContext,
+): string | null {
+  const lower = userText.toLowerCase();
+  let best: { name: string; len: number } | null = null;
+  for (const c of context.categories ?? []) {
+    const n = stripCategoryEmoji(c.name || '').trim();
+    if (n.length < 3) continue;
+    const key = n.toLowerCase();
+    if (!lower.includes(key)) continue;
+    if (!best || key.length > best.len) best = { name: n, len: key.length };
+  }
+  return best?.name ?? null;
+}
 
 /** Rough spend / income / category intents when the model skips tools. */
 export function looksLikeLedgerIntent(text: string): boolean {
@@ -41,7 +73,7 @@ export function looksLikeLedgerIntent(text: string): boolean {
   if (/\bcreate\b.+\bcategor(?:y|ies)\b/i.test(t) || /\bnew\b.+\bcategor(?:y|ies)\b/i.test(t)) {
     return true;
   }
-  if (REPORT_INTENT.test(t)) {
+  if (REPORT_INTENT.test(t) || CATEGORY_ANALYZE_INTENT.test(t)) {
     return true;
   }
   if (
@@ -329,9 +361,69 @@ export async function applyDeterministicLedgerFallback(
     }
   }
 
+  const categoryQuery = detectCategoryQuery(userText, context);
+  if (
+    categoryQuery &&
+    (CATEGORY_ANALYZE_INTENT.test(userText) ||
+      DISPUTE_INTENT.test(userText) ||
+      (context.categories ?? []).filter(
+        (c) => stripCategoryEmoji(c.name || '').trim().toLowerCase() === categoryQuery.toLowerCase(),
+      ).length > 1)
+  ) {
+    if (!actions.some((a) => a.type === 'report')) {
+      await runAiTool(
+        'analyze_category',
+        {
+          query: categoryQuery,
+          period: DISPUTE_INTENT.test(userText) ? 'allTime' : 'thisMonth',
+        },
+        context,
+        actions,
+      );
+    }
+    return actions.some((a) => a.type === 'report');
+  }
+
+  const spendOn = userText.match(SPEND_ON_INTENT);
+  if (spendOn?.[1]) {
+    const q = spendOn[1].replace(/[?!.]+$/, '').trim();
+    if (q.length >= 2) {
+      const period = /\bweek\b/i.test(userText)
+        ? 'thisWeek'
+        : /\bmonth\b/i.test(userText)
+          ? 'thisMonth'
+          : 'thisMonth';
+      const found = await runAiTool(
+        'find_entries',
+        { query: q, type: 'expense', period },
+        context,
+        actions,
+      );
+      if (found.ok && typeof found.result.count === 'number') {
+        const count = found.result.count as number;
+        const total = found.result.expenseTotal as number;
+        const currency = context.currency;
+        const body =
+          count === 0
+            ? `No matches for “${q}” in ${period}.`
+            : `${count} match${count === 1 ? '' : 'es'} for “${q}” · spent ${total} ${currency}`;
+        if (!actions.some((a) => a.type === 'report')) {
+          actions.push({ type: 'report', title: q, body });
+        }
+        return true;
+      }
+    }
+  }
+
   if (REPORT_INTENT.test(userText)) {
     if (!actions.some((a) => a.type === 'report')) {
-      await runAiTool('get_report', { focus: userText.slice(0, 80) }, context, actions);
+      const focus = userText.slice(0, 80);
+      const chart = /\b(income|earn|salary|receiv)\b/i.test(userText)
+        ? 'category'
+        : /\b(trend|over time|vs)\b/i.test(userText)
+          ? 'trend'
+          : undefined;
+      await runAiTool('get_report', { focus, period: 'thisMonth', ...(chart ? { chart } : {}) }, context, actions);
     }
     return actions.some((a) => a.type === 'report');
   }

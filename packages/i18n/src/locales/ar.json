@@ -356,6 +356,8 @@
   "app.filterAll": "الكل",
   "app.filterSpend": "مصروفات",
   "app.filterReceive": "مقبوضات",
+  "app.filteredTotal": "المجموع بعد التصفية",
+  "app.filteredCount": "{count} قيود",
   "app.editEntry": "تعديل القيد",
   "app.saveChanges": "حفظ التغييرات",
   "app.saved": "تم الحفظ",
